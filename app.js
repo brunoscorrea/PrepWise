@@ -9,7 +9,7 @@
   // Constants & default programme
   // ---------------------------------------------------------------
   const STORAGE_KEY = 'm365-study-tracker:v1';
-  const APP_VERSION = '1.0.0';
+  const APP_VERSION = '1.1.0';
   const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const DEFAULT_TARGETS = [60, 60, 60, 60, 60, 180, 150]; // minutes, Mon..Sun
@@ -719,6 +719,8 @@
     progress: { label: 'Progress', icon: 'progress', render: renderProgress },
     settings: { label: 'Settings', icon: 'settings', render: renderSettings },
   };
+  // Extension points used by plugins (see StudyApp at the bottom of this file)
+  const hooks = { dashboard: [], reset: [], load: [], ready: [] };
   let currentView = 'dashboard';
 
   function navigate(view, { scroll = true } = {}) {
@@ -737,6 +739,7 @@
     tb.textContent = currentView === 'dashboard' ? greeting() : VIEWS[currentView].label;
     eb.textContent = currentView === 'dashboard'
       ? state.settings.programmeTitle
+      : VIEWS[currentView].eyebrow ? VIEWS[currentView].eyebrow(o)
       : o.phase === 'during' ? `Week ${o.currentWeek} · Day ${o.dayNo} of 28` : o.phase === 'before' ? `Starts ${fmtDate(o.start)}` : 'Programme period ended';
     VIEWS[currentView].render(o);
     updateTimerUI();
@@ -802,6 +805,8 @@
 
       <div class="section-title">Next session</div>
       ${nextSessionCard(o)}
+
+      ${hooks.dashboard.map((fn) => { try { return fn(o); } catch (e) { console.error(e); return ''; } }).join('')}
 
       <div class="section-title">28-day countdown <span class="tiny" style="text-transform:none;letter-spacing:0">Week ${o.currentWeek}</span></div>
       <div class="card">${countdownGrid(o)}</div>
@@ -1646,12 +1651,13 @@
     },
     import: () => $('#import-file').click(),
     'reset-progress': async () => {
-      const ok = await confirmDialog({ title: 'Clear all progress?', body: 'Logged time, statuses, notes, quiz results, objectives ticks, streaks and achievements will be cleared. Your customised plan and settings stay. Export a backup first if unsure.', ok: 'Clear progress', danger: true });
+      const ok = await confirmDialog({ title: 'Clear all progress?', body: 'Logged time, statuses, notes, quiz results (including Quiz Centre history), objective ticks, streaks and achievements will be cleared. Your customised plan and settings stay. Export a backup first if unsure.', ok: 'Clear progress', danger: true });
       if (!ok) return;
       state.sessions.forEach((s) => Object.assign(s, { actualSec: 0, status: 'pending', notes: '', concepts: '', exercises: '', lectureRef: '', completedOn: null, lectures: s.lectures.map((l) => ({ ...l, done: false })) }));
       state.weeks.forEach((w) => { w.objectives.forEach((o) => { o.done = false; }); w.revision = 'not-started'; w.assessmentScore = null; });
       Object.assign(state, { quizzes: [], activity: {}, timer: null, achievements: {} });
       state.udemy = { lectureTitle: '', section: '', progress: 0, resumeUrl: '', updatedAt: null };
+      hooks.reset.forEach((fn) => fn(state, 'progress'));
       save(true);
       renderCurrent();
       toast('Progress cleared', { icon: 'refresh' });
@@ -1660,6 +1666,7 @@
       const ok = await confirmDialog({ title: 'Reset everything?', body: 'This restores the original 4-week programme and deletes all progress, custom tasks and settings on this device.', ok: 'Reset everything', danger: true });
       if (!ok) return;
       state = defaultState();
+      hooks.reset.forEach((fn) => fn(state, 'all'));
       save(true);
       navigate('dashboard');
       toast('Programme reset', { icon: 'refresh' });
@@ -1687,6 +1694,7 @@
       const ok = await confirmDialog({ title: 'Replace current data?', body: `Import “${file.name}”? Everything currently on this device will be replaced by the backup.`, ok: 'Import' });
       if (!ok) return;
       state = normalise(raw);
+      hooks.load.forEach((fn) => fn(state));
       checkAchievements(true);
       save(true);
       navigate('dashboard');
@@ -1705,10 +1713,14 @@
     else { renderCurrent(); if (state.timer && state.timer.running) ensureTick(); }
   });
   window.addEventListener('pagehide', () => save(true));
+  window.addEventListener('hashchange', () => {
+    const v = (location.hash || '').replace('#', '');
+    if (VIEWS[v] && v !== currentView) { if (sheetOpen) closeSheet(); navigate(v); }
+  });
   window.addEventListener('online', () => currentView === 'settings' && renderCurrent());
   window.addEventListener('offline', () => currentView === 'settings' && renderCurrent());
   // Storage changed in another tab
-  window.addEventListener('storage', (e) => { if (e.key === STORAGE_KEY && e.newValue) { state = normalise(JSON.parse(e.newValue)); renderCurrent(); } });
+  window.addEventListener('storage', (e) => { if (e.key === STORAGE_KEY && e.newValue) { state = normalise(JSON.parse(e.newValue)); hooks.load.forEach((fn) => fn(state)); renderCurrent(); } });
 
   // Refresh day-dependent stats when the date changes while the app is open.
   let lastDay = todayISO();
@@ -1739,19 +1751,42 @@
     });
   }
 
-  // Build nav buttons
-  $$('.nav-btn').forEach((b) => {
-    const v = VIEWS[b.dataset.nav];
-    b.innerHTML = `<span class="nav-ic">${icon(v.icon)}</span><span>${v.label}</span>`;
-  });
+  // ---------------------------------------------------------------
+  // Plugin API — lets feature modules (e.g. quiz-centre.js) add views,
+  // dashboard cards, achievements and reset behaviour without editing this file.
+  // Plugins load after app.js and register before boot (DOMContentLoaded).
+  // ---------------------------------------------------------------
+  window.StudyApp = {
+    get state() { return state; },
+    save, overall, renderCurrent, navigate, toast, confirmDialog, celebrate, openSheet, closeSheet,
+    icon, esc, bar, ring, fmtDate, fmtMin, fmtClock, relDay, todayISO, toISO, parseISO, addDays, daysBetween, clamp, num, uid,
+    logActivity, afterChange, checkAchievements,
+    isSheetOpen: () => sheetOpen,
+    get currentView() { return currentView; },
+    registerView(id, def) { VIEWS[id] = def; },
+    addAchievement(a) { if (!ACHIEVEMENTS.some((x) => x.id === a.id)) ACHIEVEMENTS.push(a); },
+    hooks,
+    ICONS,
+  };
 
-  // Boot
-  load();
-  checkAchievements(true);
-  save(true);
-  const initial = (location.hash || '').replace('#', '');
-  navigate(VIEWS[initial] ? initial : 'dashboard', { scroll: false });
-  if (state.timer && state.timer.running) ensureTick();
+  function boot() {
+    // Build nav buttons
+    $$('.nav-btn').forEach((b) => {
+      const v = VIEWS[b.dataset.nav];
+      if (!v) { b.hidden = true; return; }
+      b.innerHTML = `<span class="nav-ic">${icon(v.icon)}</span><span>${v.short || v.label}</span>`;
+    });
+    load();
+    hooks.load.forEach((fn) => fn(state));
+    checkAchievements(true);
+    save(true);
+    const initial = (location.hash || '').replace('#', '');
+    navigate(VIEWS[initial] ? initial : 'dashboard', { scroll: false });
+    if (state.timer && state.timer.running) ensureTick();
+    hooks.ready.forEach((fn) => fn(state));
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else setTimeout(boot, 0);
 
   // Expose a tiny debug hook for testing in DevTools.
   window.__studyTracker = { get state() { return state; }, overall, save, render: renderCurrent };

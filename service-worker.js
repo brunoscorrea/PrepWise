@@ -1,12 +1,17 @@
 /* Offline-first service worker for M365 Study Tracker.
    Bump CACHE_VERSION whenever you change any app file so phones pick up the update. */
-const CACHE_VERSION = 'v1.0.0';
+const CACHE_VERSION = 'v1.1.0';
 const CACHE_NAME = `m365-study-tracker-${CACHE_VERSION}`;
 const APP_SHELL = [
   './',
   './index.html',
   './styles.css',
   './app.js',
+  './quiz-centre.js',
+  './ab650/meta.js',
+  './ab650/questions-d1.js',
+  './ab650/questions-d2.js',
+  './ab650/questions-d3.js',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',

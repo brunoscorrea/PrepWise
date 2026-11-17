@@ -30,6 +30,7 @@
     <main id="main">
       <section class="view" id="view-dashboard" aria-label="Dashboard"></section>
       <section class="view" id="view-plan" aria-label="Study plan" hidden></section>
+      <section class="view" id="view-quiz" aria-label="Quiz Centre" hidden></section>
       <section class="view" id="view-progress" aria-label="Progress" hidden></section>
       <section class="view" id="view-settings" aria-label="Settings" hidden></section>
     </main>
@@ -39,6 +40,7 @@
     <nav class="bottom-nav" aria-label="Main">
       <button class="nav-btn" data-nav="dashboard" aria-label="Dashboard"></button>
       <button class="nav-btn" data-nav="plan" aria-label="Study plan"></button>
+      <button class="nav-btn" data-nav="quiz" aria-label="Quiz Centre"></button>
       <button class="nav-btn" data-nav="progress" aria-label="Progress"></button>
       <button class="nav-btn" data-nav="settings" aria-label="Settings"></button>
     </nav>
@@ -58,6 +60,12 @@
   <input type="file" id="import-file" accept="application/json,.json" hidden>
 
   <noscript><p style="padding:24px;color:#fff">This app needs JavaScript enabled.</p></noscript>
+  <div id="quiz-player" class="quiz-player" hidden></div>
+  <script src="ab650/meta.js"></script>
+  <script src="ab650/questions-d1.js"></script>
+  <script src="ab650/questions-d2.js"></script>
+  <script src="ab650/questions-d3.js"></script>
   <script src="app.js"></script>
+  <script src="quiz-centre.js"></script>
 </body>
 </html>

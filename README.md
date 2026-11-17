@@ -5,13 +5,34 @@ An offline, installable study tracker (PWA) for a 4-week Microsoft 365 & AI serv
 ## Files
 
 ```
-index.html          App shell
-styles.css          Mobile-first dark theme
-app.js              All logic (state, timer, stats, views, import/export)
-manifest.json       PWA manifest (name, icons, standalone display)
-service-worker.js   Offline cache
-icons/              192px, 512px and maskable 512px icons
+index.html            App shell
+styles.css            Mobile-first dark theme (tracker + Quiz Centre)
+app.js                Study tracker logic (state, timer, stats, views, import/export, plugin API)
+quiz-centre.js        AB-650 Quiz Centre (modes, exam player, scoring, analytics)
+ab650/meta.js         Exam domains, official objectives and Microsoft Learn references
+ab650/questions-d1.js Domain 1 question bank
+ab650/questions-d2.js Domain 2 question bank
+ab650/questions-d3.js Domain 3 question bank
+manifest.json         PWA manifest (name, icons, standalone display)
+service-worker.js     Offline cache
+icons/                192px, 512px and maskable 512px icons
 ```
+
+## AB-650 Quiz Centre
+
+The **Quiz** tab is a practice centre for exam AB-650: Administering Microsoft 365 and AI Services. It's organised around the [official study guide](https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/ab-650).
+
+- **167 original practice questions** mapped to all 55 objectives in the study guide (skills outline dated 27 July 2026). There are single-answer, multiple-answer, ordering and matching questions, most of them scenario-based, at three difficulty levels.
+- Every question has an explanation, a reason why each wrong option is wrong, the related technology and exam objective, and a Microsoft Learn link.
+- **Modes:** Quick (10), Standard (25), Full Mock Exam (50, weighted 11/21/18 to the official domain percentages, 100-minute timer), Domain, Weak Areas, Flagged, Daily Challenge (5 a day, with a streak), Week revision assessments, and a Final Mock Assessment (60 questions) that unlocks at the end of Week 4.
+- **Practice mode** shows the answer and explanation straight away. **Exam mode** is timed and shows answers only after you submit.
+- Scoring is all-or-nothing per question, like the real exam: a multiple-answer question needs exactly the right set.
+- **Mastery:** a domain counts as mastered at 85% latest-answer accuracy with at least 60% of its questions answered. Certification prep only shows as complete when all three domains are mastered.
+
+**Important:** these are original learning questions, not Microsoft exam questions. Newer features such as Agent 365, Entra Agent ID and Copilot Cowork change often, so always check the linked Learn page.
+
+### Adding or editing questions
+Add objects to the relevant `ab650/questions-d*.js` file. Each question has `id`, `obj` (study-guide objective such as `2.2.5`), `topic`, `diff` (`easy`/`intermediate`/`advanced`), `type` (`single`/`multi`/`order`/`match`), `scenario`, `q`, `opts` + `ans` (option indexes) or `pairs` (for matching), `exp`, `why` (one reason per option, with an empty string for correct options), `feat` and `ref` (a key in `ab650/meta.js` refs). For `order` questions, list `opts` in the correct order and the app shuffles them. Remember to bump `CACHE_VERSION` in `service-worker.js` afterwards.
 
 ## Run locally
 
