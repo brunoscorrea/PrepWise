@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0f17">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Offline study tracker for a 4-week Microsoft 365 & AI services certification programme.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Study Tracker · Microsoft 365</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="topbar-text">
+          <div class="eyebrow" id="topbar-eyebrow"></div>
+          <h1 id="topbar-title">Dashboard</h1>
+        </div>
+        <div id="topbar-slot"></div>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="view" id="view-dashboard" aria-label="Dashboard"></section>
+      <section class="view" id="view-plan" aria-label="Study plan" hidden></section>
+      <section class="view" id="view-progress" aria-label="Progress" hidden></section>
+      <section class="view" id="view-settings" aria-label="Settings" hidden></section>
+    </main>
+
+    <div id="mini-timer" class="mini-timer" hidden></div>
+
+    <nav class="bottom-nav" aria-label="Main">
+      <button class="nav-btn" data-nav="dashboard" aria-label="Dashboard"></button>
+      <button class="nav-btn" data-nav="plan" aria-label="Study plan"></button>
+      <button class="nav-btn" data-nav="progress" aria-label="Progress"></button>
+      <button class="nav-btn" data-nav="settings" aria-label="Settings"></button>
+    </nav>
+  </div>
+
+  <div id="sheet-root" class="sheet-root" hidden>
+    <div class="sheet-backdrop" data-action="close-sheet"></div>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle" data-action="close-sheet"></div>
+      <div class="sheet-body" id="sheet-body"></div>
+    </div>
+  </div>
+
+  <div id="dialog-root" class="dialog-root" hidden></div>
+  <div id="celebrate-root" class="celebrate-root" hidden></div>
+  <div id="toast-root" class="toast-root" aria-live="polite"></div>
+  <input type="file" id="import-file" accept="application/json,.json" hidden>
+
+  <noscript><p style="padding:24px;color:#fff">This app needs JavaScript enabled.</p></noscript>
+  <script src="app.js"></script>
+</body>
+</html>
