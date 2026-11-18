@@ -124,7 +124,7 @@ const noOverflow = "return document.documentElement.scrollWidth <= window.innerW
     t('4 profiles: Sam inherits no quiz history', JSON.stringify(await A.eval(ATTEMPTS)) === JSON.stringify({ 'ab-650': 0, 'sc-300': 0, 'md-102': 0 }), JSON.stringify(await A.eval(ATTEMPTS)));
     t('4 profiles: Sam inherits no sessions, notes or bookmarks', await A.eval("return Object.values(PrepWise.store.progress).every((p) => !p.notes.length && !p.bookmarks.topics.length && p.sessions.every((s) => s.status === 'pending' && !s.notes && !s.actualSec))"));
     t('10 no personal data: Sam\'s pages show nothing of Bruno', await (async () => { for (const v of ['home', 'plan', 'quiz', 'analytics', 'revision', 'settings']) { await A.eval(`PrepWise.navigate('${v}'); return true`); await sleep(120); const txt = await A.eval('return document.querySelector("main").innerText'); if (/bruno-private|bruno-bookmark|Bruno note/.test(txt)) return false; } return true; })());
-    t('4 profiles: AB-650, SC-300 and MD-102 are all available to Sam', await A.eval("return ['ab-650', 'sc-300', 'md-102'].every((id) => PrepWise.store.certs[id] && PrepWise.getQuestions(id).length >= 120)"));
+    t('4 profiles: AB-650, SC-300, MD-102 and AI-103 are all available to Sam', await A.eval("return ['ab-650', 'sc-300', 'md-102', 'ai-103'].every((id) => PrepWise.store.certs[id] && PrepWise.getQuestions(id).length >= 120)"));
     await A.eval(SWITCH_CERT('sc-300')); await A.eval(QUIZ('quick')); await A.eval(QUIZ('quick'));
     await A.eval(SWITCH_CERT('ab-650')); await A.eval(QUIZ('standard'));
     const samAttempts = await A.eval(ATTEMPTS);

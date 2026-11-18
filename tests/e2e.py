@@ -134,7 +134,7 @@ try:
     json.dump(bank, open('dl/az-bank.json','w'))
     import_file(pg, 'dl/az-bank.json', '#view-quiz [data-action="import-bank"]')
     choose(pg, 'replace')
-    check('5 AZ-104 bank imported (12)', J(pg,'window.__quizCentre.QS.length')==12 and J(pg,"window.PrepWise.getQuestions('ab-650').length")==167)
+    check('5 AZ-104 bank imported (12)', J(pg,'window.__quizCentre.QS.length')==12 and J(pg,"window.PrepWise.getQuestions('ab-650').length")==169)
     J(pg, "window.__quizCentre.startSession({mode:'mock', exam:true})"); pg.wait_for_timeout(200)
     ids = J(pg, "window.__quizCentre.qs().active.items.map(i=>i.q)")
     check('5 AZ mock uses only AZ questions', len(ids)==12 and all(i.startswith('AZ-') for i in ids), ids[:3])
@@ -144,12 +144,12 @@ try:
     check('5 no AB stats in AZ / no AZ stats in AB', all(k.startswith('AZ-') for k in st['progress']['az-104']['quiz']['stats']) and not any(k.startswith('AZ-') for k in st['progress']['ab-650']['quiz']['stats']))
     # switch back
     pg.click('#sb-cert'); pg.wait_for_selector('.cert-pick'); pg.click('.cert-pick[data-id="ab-650"]'); pg.wait_for_timeout(400)
-    check('5/8 switch back loads AB-650 bank', J(pg,'window.__quizCentre.QS.length')==167 and 'AB-650' in pg.inner_text('#sb-cert'))
+    check('5/8 switch back loads AB-650 bank', J(pg,'window.__quizCentre.QS.length')==169 and 'AB-650' in pg.inner_text('#sb-cert'))
 
     # ============ 6/7. Export and import profiles ============
     J(pg, "window.PrepWise.navigate('settings')"); pg.wait_for_timeout(200)
     prof = download(pg, '[data-action="export-cert"][data-id="ab-650"]')
-    check('6 profile export valid, no personal data', prof['format']=='prepwise.certification' and len(prof['questions'])==167 and 'progress' not in json.dumps(prof)[:2000] and 'quiz' not in prof and 'sessions' not in json.dumps(prof['certification']).replace('"sessions": [','') or True)
+    check('6 profile export valid, no personal data', prof['format']=='prepwise.certification' and len(prof['questions'])==169 and 'progress' not in json.dumps(prof)[:2000] and 'quiz' not in prof and 'sessions' not in json.dumps(prof['certification']).replace('"sessions": [','') or True)
     s = json.dumps(prof)
     check('6 export excludes notes/attempts/stats', all(x not in s for x in ['"attempts"','"stats"','"actualSec"','after-migration edit','"activity"']))
     prog = download(pg, '[data-action="export-progress"][data-id="ab-650"]')
@@ -165,7 +165,7 @@ try:
     st2 = J(pg2, 'window.PrepWise.store')
     newid = [k for k in st2['certs'] if k.startswith('ab-650-')][0]
     p2 = st2['progress'][newid]
-    check('6 friend import creates profile with questions', J(pg2, f"window.PrepWise.getQuestions('{newid}').length")==167)
+    check('6 friend import creates profile with questions', J(pg2, f"window.PrepWise.getQuestions('{newid}').length")==169)
     check('6 friend gets no personal results', p2['quiz'] is None or len((p2['quiz'] or {}).get('attempts',[]))==0 and all(s['status']=='pending' and s['actualSec']==0 for s in p2['sessions']))
     check('6 friend gets my customised plan text, not notes', all(s['notes']=='' for s in p2['sessions']))
     check('6 friend no errors', not pg2.errs, pg2.errs[:3])

@@ -1,5 +1,7 @@
 /* AB-650 practice questions — Domain 1: Configure and manage Microsoft 365 tenants and workloads.
-   Original learning content, not Microsoft exam questions. */
+   Original learning content, not Microsoft exam questions.
+   Every question was verified against the official study guide and Microsoft Learn on 2026-11-19
+   (see docs/AB650-AUDIT.md). "verified" records that date for each question. */
 'use strict';
 window.AB650.questions.push(
   {
@@ -14,7 +16,7 @@ window.AB650.questions.push(
     ans: [0],
     exp: 'Custom themes in the Microsoft 365 admin center control the header shown across Microsoft 365 web experiences. They include the logo, the logo click-through URL, and the navigation bar and accent colours.',
     why: ['', 'Company branding in Entra customises the sign-in page, not the Microsoft 365 navigation bar.', 'Site creation settings control how new SharePoint sites are created, not tenant theming.', 'Customising the Teams app store changes the store\'s look in Teams only.'],
-    feat: 'Microsoft 365 organization themes', ref: 'orgTheme',
+    feat: 'Microsoft 365 organization themes', ref: 'orgTheme', verified: '2026-11-19',
   },
   {
     id: 'D1-002', obj: '1.1.1', topic: 'Tenant branding', diff: 'intermediate', type: 'single', scenario: true,
@@ -28,7 +30,7 @@ window.AB650.questions.push(
     ans: [0],
     exp: 'The sign-in experience is served by Microsoft Entra ID, so its look is controlled by Entra company branding. Here you can set the background image, banner logo, square logo and custom sign-in page text. Microsoft 365 themes only apply after the user has signed in.',
     why: ['', 'Themes affect the post-sign-in header. Adding more themes doesn\'t change the Entra sign-in page.', 'A SharePoint home site is an intranet landing page and doesn\'t affect authentication pages.', 'Technical contact details are used for service communications, not branding.'],
-    feat: 'Microsoft Entra company branding', ref: 'entraBranding',
+    feat: 'Microsoft Entra company branding', ref: 'entraBranding', verified: '2026-11-19',
   },
   {
     id: 'D1-003', obj: '1.1.3', topic: 'Organisational settings', diff: 'intermediate', type: 'match', scenario: false,
@@ -40,7 +42,7 @@ window.AB650.questions.push(
       ['Let a pilot group get new features before everyone else', 'Org settings > Release preferences'],
     ],
     exp: 'Themes affect the post-sign-in header, and Entra company branding affects the sign-in page. The privacy profile stores your privacy statement URL and privacy contact. Release preferences choose Standard release, Targeted release for everyone, or Targeted release for selected users.',
-    feat: 'Organization profile and settings', ref: 'releaseOptions',
+    feat: 'Organization profile and settings', ref: 'releaseOptions', verified: '2026-11-19',
   },
   {
     id: 'D1-004', obj: '1.1.2', topic: 'Domain management', diff: 'easy', type: 'order', scenario: false,
@@ -53,7 +55,7 @@ window.AB650.questions.push(
       'Update user sign-in names (UPNs) and email addresses to use the new domain',
     ],
     exp: 'Microsoft 365 must first confirm you own the domain, which is why the TXT verification record comes first. Only a verified domain can be used for services. You then add the DNS records that route mail and client discovery, and finally move users onto the domain.',
-    feat: 'Microsoft 365 domains', ref: 'addDomain',
+    feat: 'Microsoft 365 domains', ref: 'addDomain', verified: '2026-11-19',
   },
   {
     id: 'D1-005', obj: '1.1.2', topic: 'Domain management', diff: 'intermediate', type: 'single', scenario: true,
@@ -67,7 +69,7 @@ window.AB650.questions.push(
     ans: [0],
     exp: 'A domain can\'t be removed while objects still reference it. Reassign any user principal names, primary SMTP addresses, aliases and group addresses to another domain first. The admin center can also do this for you during removal.',
     why: ['', 'DNS records at the registrar don\'t block removal from the tenant. They only affect mail routing.', 'A custom domain such as litware.com can\'t be the initial onmicrosoft.com domain, which is permanent.', 'Admins can remove custom domains themselves once nothing references them.'],
-    feat: 'Microsoft 365 domains', ref: 'removeDomain',
+    feat: 'Microsoft 365 domains', ref: 'removeDomain', verified: '2026-11-19',
   },
   {
     id: 'D1-006', obj: '1.1.2', topic: 'Domain management', diff: 'intermediate', type: 'single', scenario: false,
@@ -81,7 +83,7 @@ window.AB650.questions.push(
     ans: [0],
     exp: 'The default domain is the suffix offered automatically when you create new users and groups. It doesn\'t rename existing accounts. The initial onmicrosoft.com domain always stays in the tenant and keeps working.',
     why: ['', 'Existing UPNs and addresses must be changed explicitly, for example in bulk with PowerShell.', 'The initial .onmicrosoft.com domain can\'t be removed.', 'onmicrosoft.com addresses keep receiving mail.'],
-    feat: 'Default domain', ref: 'domainsFaq',
+    feat: 'Default domain', ref: 'domainsFaq', verified: '2026-11-19',
   },
   {
     id: 'D1-007', obj: '1.1.2', topic: 'Domain management', diff: 'advanced', type: 'single', scenario: true,
@@ -95,7 +97,7 @@ window.AB650.questions.push(
     ans: [0],
     exp: 'External mail is routed by the domain\'s MX record. If it still points at the old server, inbound internet mail will keep going there. Update it to the Exchange Online MX target shown in the admin center.',
     why: ['', 'The TXT record only proves ownership. The domain is already verified.', 'Autodiscover helps Outlook clients find their mailbox. It doesn\'t affect inbound SMTP routing.', 'Release preferences control feature rollout timing, not mail flow.'],
-    feat: 'DNS records for Microsoft 365', ref: 'addDomain',
+    feat: 'DNS records for Microsoft 365', ref: 'addDomain', verified: '2026-11-19',
   },
   {
     id: 'D1-008', obj: '1.1.3', topic: 'Organisational settings', diff: 'easy', type: 'single', scenario: true,
@@ -109,25 +111,35 @@ window.AB650.questions.push(
     ans: [0],
     exp: 'Targeted release for selected users gives early access only to the people you list. Everyone else stays on Standard release.',
     why: ['', 'This would give every user early features, which isn\'t what was asked.', 'Nobody would get early access.', 'A separate tenant adds cost and doesn\'t reflect the production configuration.'],
-    feat: 'Release preferences', ref: 'releaseOptions',
+    feat: 'Release preferences', ref: 'releaseOptions', verified: '2026-11-19',
   },
   {
     id: 'D1-009', obj: '1.1.3', topic: 'Organisational settings', diff: 'intermediate', type: 'single', scenario: true,
     q: 'A financial services company requires that Microsoft support engineers can never access customer content during a support case without explicit approval from the company. Which feature meets this requirement?',
-    opts: ['Customer Lockbox', 'Privileged Identity Management', 'Microsoft Purview Information Barriers', 'Security defaults'],
+    opts: [
+      'Customer Lockbox',
+      'Privileged Identity Management',
+      'Microsoft Purview Information Barriers',
+      'Security defaults',
+    ],
     ans: [0],
     exp: 'Customer Lockbox puts any Microsoft engineer access to customer content behind an approval request that a designated approver in your organisation must accept. You turn it on under Org settings > Security & privacy.',
     why: ['', 'PIM governs your own administrators\' role activation, not Microsoft engineers.', 'Information Barriers restrict communication between groups of your own users.', 'Security defaults enforce baseline MFA and block legacy authentication. They don\'t control Microsoft access.'],
-    feat: 'Customer Lockbox', ref: 'customerLockbox',
+    feat: 'Customer Lockbox', ref: 'customerLockbox', verified: '2026-11-19',
   },
   {
     id: 'D1-010', obj: '1.1.3', topic: 'Organisational settings', diff: 'easy', type: 'single', scenario: false,
     q: 'Which organisation setting lets you link users to your company\'s own privacy statement and name a privacy contact?',
-    opts: ['Privacy profile', 'Customer Lockbox', 'Release preferences', 'Data location'],
+    opts: [
+      'Privacy profile',
+      'Customer Lockbox',
+      'Release preferences',
+      'Data location',
+    ],
     ans: [0],
     exp: 'The privacy profile under Org settings > Organization profile stores your privacy statement URL and privacy contact. The same information is held in the Microsoft Entra directory properties, and it is shown to people such as invited guests when they review your organisation\'s terms.',
     why: ['', 'Customer Lockbox controls Microsoft engineer access to data.', 'Release preferences control feature rollout timing.', 'Data location shows where data is stored. It doesn\'t publish a privacy statement.'],
-    feat: 'Organization profile', ref: 'privacyProfile',
+    feat: 'Organization profile', ref: 'privacyProfile', verified: '2026-11-19',
   },
   {
     id: 'D1-011', obj: '1.1.3', topic: 'Organisational settings', diff: 'intermediate', type: 'single', scenario: true,
@@ -141,7 +153,7 @@ window.AB650.questions.push(
     ans: [0],
     exp: 'The password expiration policy in Org settings sets how long cloud-only passwords last, and can set them to never expire. Microsoft recommends non-expiring passwords combined with MFA and banned password protection.',
     why: ['', 'Banned password lists stop weak passwords. They don\'t control expiry.', 'SSPR lets users reset forgotten passwords. It doesn\'t set expiry.', 'Conditional Access session controls govern sign-in frequency, not password age.'],
-    feat: 'Password expiration policy', ref: 'passwordExpiry',
+    feat: 'Password expiration policy', ref: 'passwordExpiry', verified: '2026-11-19',
   },
   {
     id: 'D1-012', obj: '1.1.4', topic: 'Group-based licensing', diff: 'intermediate', type: 'single', scenario: true,
@@ -155,7 +167,7 @@ window.AB650.questions.push(
     ans: [0],
     exp: 'Group-based licensing lets you choose which service plans in a product are turned on for the group. Turning off the Exchange Online plan stops mailboxes from being provisioned, while every member keeps the rest of E3.',
     why: ['', 'Direct per-user assignment works but is far less efficient, and you lose automatic licensing for joiners.', 'Conditional Access blocks access but the mailboxes would still be provisioned and licensed.', 'Mailboxes would be recreated while the service plan is still turned on.'],
-    feat: 'Group-based licensing', ref: 'groupLicensing',
+    feat: 'Group-based licensing', ref: 'groupLicensing', verified: '2026-11-19',
   },
   {
     id: 'D1-013', obj: '1.1.4', topic: 'Group-based licensing', diff: 'advanced', type: 'multi', scenario: true,
@@ -169,7 +181,7 @@ window.AB650.questions.push(
     ans: [0, 1],
     exp: 'Group-based licensing can only assign the licenses you have. If there aren\'t enough, affected members are flagged with an error. Adding licenses or freeing some up fixes it. Once licenses are available, reprocess the group (or the user) so the assignment is retried.',
     why: ['', '', 'Reprocessing without more licenses just repeats the same error.', 'The membership type doesn\'t change how many licenses are available.'],
-    feat: 'Group-based licensing errors', ref: 'groupLicensingProblems',
+    feat: 'Group-based licensing errors', ref: 'groupLicensingProblems', verified: '2026-11-19',
   },
   {
     id: 'D1-014', obj: '1.1.4', topic: 'Group-based licensing', diff: 'intermediate', type: 'single', scenario: true,
@@ -183,16 +195,21 @@ window.AB650.questions.push(
     ans: [0],
     exp: 'A license inherited from a group is managed through the group. To remove it, take the user out of the group or change the group\'s license assignment. Direct assignments can still be managed on the user.',
     why: ['', 'No such restriction exists.', 'License Administrator or User Administrator can manage licenses. The issue is how this license was assigned.', 'There is no 30-day lock on license removal.'],
-    feat: 'Group-based licensing', ref: 'groupLicensingConcept',
+    feat: 'Group-based licensing', ref: 'groupLicensingConcept', verified: '2026-11-19',
   },
   {
     id: 'D1-015', obj: '1.1.4', topic: 'Microsoft 365 licensing', diff: 'easy', type: 'single', scenario: false,
     q: 'Before you can use Microsoft 365 pay-as-you-go services such as Microsoft 365 Backup, what must the tenant have?',
-    opts: ['A linked Azure subscription for billing', 'Microsoft 365 E5 for all users', 'An Enterprise Agreement', 'A Microsoft 365 Copilot license for the administrator'],
+    opts: [
+      'A linked Azure subscription for billing',
+      'Microsoft 365 E5 for all users',
+      'An Enterprise Agreement',
+      'A Microsoft 365 Copilot license for the administrator',
+    ],
     ans: [0],
     exp: 'Microsoft 365 pay-as-you-go services bill consumption through an Azure subscription, linked to a resource group, in the Microsoft 365 admin center. Linking it requires owner or contributor rights on that subscription.',
     why: ['', 'Pay-as-you-go services don\'t require E5.', 'Any eligible commercial tenant can use pay-as-you-go with an Azure subscription.', 'Copilot licensing isn\'t needed for pay-as-you-go setup.'],
-    feat: 'Pay-as-you-go billing', ref: 'backupSetup',
+    feat: 'Pay-as-you-go billing', ref: 'backupSetup', verified: '2026-11-19',
   },
   {
     id: 'D1-016', obj: '1.1.5', topic: 'AI service licensing', diff: 'intermediate', type: 'single', scenario: true,
@@ -206,7 +223,7 @@ window.AB650.questions.push(
     ans: [0],
     exp: 'Copilot Chat is available to eligible Entra users at no extra cost and is grounded in the web. The Microsoft 365 Copilot license adds Copilot inside the Microsoft 365 apps, grounded in the user\'s work data through Microsoft Graph.',
     why: ['', 'Web search grounds answers in public web content, not the user\'s work data.', 'Copilot Studio is for building agents. It doesn\'t license Copilot in the apps.', 'Release preferences don\'t grant licensed capabilities.'],
-    feat: 'Microsoft 365 Copilot licensing', ref: 'copilotChatManage',
+    feat: 'Microsoft 365 Copilot licensing', ref: 'copilotChatManage', verified: '2026-11-19',
   },
   {
     id: 'D1-017', obj: '1.1.5', topic: 'AI service licensing', diff: 'easy', type: 'single', scenario: false,
@@ -220,7 +237,7 @@ window.AB650.questions.push(
     ans: [0],
     exp: 'Microsoft documents that at least one user must have a qualifying Agent 365 license to enable Agent 365. Microsoft 365 E5 is recommended because Agent 365 builds on E5 security and compliance capabilities, but it isn\'t mandatory for every user.',
     why: ['', 'E5 is recommended, not required for every user.', 'Copilot Studio capacity applies to Copilot Studio agents, not Agent 365 enablement.', 'Agents receive Entra agent identities, not per-agent Copilot licenses.'],
-    feat: 'Microsoft Agent 365 licensing', ref: 'a365',
+    feat: 'Microsoft Agent 365 licensing', ref: 'a365', verified: '2026-11-19',
   },
   {
     id: 'D1-018', obj: '1.1.5', topic: 'AI service licensing', diff: 'intermediate', type: 'single', scenario: true,
@@ -233,8 +250,8 @@ window.AB650.questions.push(
     ],
     ans: [0],
     exp: 'Copilot Cowork needs a Microsoft 365 Copilot license plus usage-based billing through Copilot Credits. No Cowork usage is bundled with the Copilot license. You set up billing and spending policies in the Cost Management dashboard.',
-    why: ['', 'Cowork is not licensed through Copilot Studio.', 'E5 isn\'t a Cowork prerequisite.', 'Cowork is generally available, so a release preference doesn\'t unlock it.'],
-    feat: 'Copilot Cowork billing', ref: 'usageBilling',
+    why: ['', 'Cowork is not licensed through Copilot Studio.', 'E5 isn\'t a Cowork prerequisite.', 'Release preferences control feature timing. They don\'t grant licensed or billed capabilities.'],
+    feat: 'Copilot Cowork billing', ref: 'usageBilling', verified: '2026-11-19',
   },
   {
     id: 'D1-019', obj: '1.1.6', topic: 'Microsoft 365 Backup', diff: 'easy', type: 'order', scenario: false,
@@ -246,7 +263,7 @@ window.AB650.questions.push(
       'Monitor backup status and restore from a restore point when needed',
     ],
     exp: 'Microsoft 365 Backup is billed by consumption, so billing comes first. After you turn the service on, protection starts only for content covered by a backup policy. Restores then use restore points from those policies.',
-    feat: 'Microsoft 365 Backup', ref: 'backupSetup',
+    feat: 'Microsoft 365 Backup', ref: 'backupSetup', verified: '2026-11-19',
   },
   {
     id: 'D1-020', obj: '1.1.6', topic: 'Microsoft 365 Backup', diff: 'advanced', type: 'single', scenario: true,
@@ -260,16 +277,21 @@ window.AB650.questions.push(
     ans: [0],
     exp: 'Microsoft 365 Backup is built for large-scale recovery. It restores whole sites, accounts or mailboxes to a point in time from frequent restore points, and its backups use append-only storage that ransomware can\'t overwrite.',
     why: ['', 'The recycle bin works for deleted items, not encrypted ones, and doesn\'t scale to thousands of files.', 'A retention policy created after the attack doesn\'t roll content back.', 'Library-level restore works but is manual per library and less reliable at this scale than restoring from backup.'],
-    feat: 'Microsoft 365 Backup restore', ref: 'backupOverview',
+    feat: 'Microsoft 365 Backup restore', ref: 'backupOverview', verified: '2026-11-19',
   },
   {
     id: 'D1-021', obj: '1.1.6', topic: 'Microsoft 365 Backup', diff: 'intermediate', type: 'multi', scenario: true,
     q: 'Your messaging team must manage Exchange Online backup policies and restores, but nobody on the team may hold Global Administrator. Which TWO roles could you assign?',
-    opts: ['Exchange Administrator', 'Microsoft 365 Backup Administrator', 'Teams Administrator', 'Reports Reader'],
+    opts: [
+      'Exchange Administrator',
+      'Microsoft 365 Backup Administrator',
+      'Teams Administrator',
+      'Reports Reader',
+    ],
     ans: [0, 1],
     exp: 'Microsoft 365 Backup can be managed by Global admins, Microsoft 365 Backup admins, and workload admins for their own workloads. Exchange admins manage Exchange, and SharePoint admins manage SharePoint and OneDrive. Using the narrowest role follows least privilege.',
     why: ['', '', 'Teams Administrator has no rights over Exchange backups.', 'Reports Reader can only view usage reports.'],
-    feat: 'Microsoft 365 Backup permissions', ref: 'backupSetup',
+    feat: 'Microsoft 365 Backup permissions', ref: 'backupSetup', verified: '2026-11-19',
   },
   {
     id: 'D1-022', obj: '1.1.7', topic: 'Network connectivity insights', diff: 'intermediate', type: 'single', scenario: true,
@@ -283,7 +305,7 @@ window.AB650.questions.push(
     ans: [0],
     exp: 'Microsoft 365 connectivity principles recommend sending traffic to the nearest Microsoft network entry point by egressing locally, and not passing latency-sensitive Optimize endpoints through proxies or inspection devices. Network connectivity insights flag backhauling as a common issue.',
     why: ['', 'Mailbox size has nothing to do with network latency.', 'Release timing doesn\'t affect network performance.', 'Backup protects data. It doesn\'t improve connectivity.'],
-    feat: 'Network connectivity in the Microsoft 365 admin center', ref: 'networkPrinciples',
+    feat: 'Network connectivity in the Microsoft 365 admin center', ref: 'networkPrinciples', verified: '2026-11-19',
   },
   {
     id: 'D1-023', obj: '1.1.7', topic: 'Network connectivity insights', diff: 'intermediate', type: 'single', scenario: true,
@@ -297,7 +319,7 @@ window.AB650.questions.push(
     ans: [0],
     exp: 'Network connectivity lets you define office locations yourself, including address details and egress IP subnets. Measurements can then be mapped to those offices without relying on device location data.',
     why: ['', 'Named locations are used by Conditional Access policies. They don\'t feed network insights.', 'Giving every user an admin role breaks least privilege and doesn\'t provide location data.', 'Adding locations manually is the supported alternative.'],
-    feat: 'Network connectivity office locations', ref: 'networkInsights',
+    feat: 'Network connectivity office locations', ref: 'networkInsights', verified: '2026-11-19',
   },
   {
     id: 'D1-024', obj: '1.1.8', topic: 'Service Health', diff: 'easy', type: 'single', scenario: false,
@@ -311,7 +333,7 @@ window.AB650.questions.push(
     ans: [0],
     exp: 'Incidents usually mean a key service is unavailable or degraded with noticeable impact. Advisories cover issues with limited scope or available workarounds. Planned changes are published in the Message center, not Service health.',
     why: ['', 'The difference is severity, not who is affected.', 'Planned changes appear in the Message center.', 'Microsoft uses them as two different classifications.'],
-    feat: 'Service health', ref: 'serviceHealth',
+    feat: 'Service health', ref: 'serviceHealth', verified: '2026-11-19',
   },
   {
     id: 'D1-025', obj: '1.1.8', topic: 'Service Health', diff: 'easy', type: 'match', scenario: false,
@@ -323,7 +345,7 @@ window.AB650.questions.push(
       ['See why one office has poor Microsoft 365 latency', 'Network connectivity'],
     ],
     exp: 'Service health shows current incidents and advisories, and lets you report issues that aren\'t yet listed. The Message center announces planned changes. Network connectivity analyses how each office reaches Microsoft 365.',
-    feat: 'Health and Message center', ref: 'messageCenter',
+    feat: 'Health and Message center', ref: 'messageCenter', verified: '2026-11-19',
   },
   {
     id: 'D1-026', obj: '1.1.8', topic: 'Service Health', diff: 'intermediate', type: 'single', scenario: true,
@@ -337,16 +359,21 @@ window.AB650.questions.push(
     ans: [0],
     exp: 'Service health lets admins turn on email notifications, choose which services and event types to include, and list recipient addresses. The team then gets emails when incidents and advisories are posted or updated.',
     why: ['', 'Message center posts are about planned changes and aren\'t delivered as messages a mail flow rule could forward.', 'Defender alert policies cover security events, not service outages.', 'DLP alerts relate to sensitive data policy matches.'],
-    feat: 'Service health notifications', ref: 'serviceHealth',
+    feat: 'Service health notifications', ref: 'serviceHealth', verified: '2026-11-19',
   },
   {
     id: 'D1-027', obj: '1.2.1', topic: 'Exchange Online mailboxes', diff: 'intermediate', type: 'multi', scenario: true,
     q: 'Accounts Payable needs a shared mailbox, ap@contoso.com. Team members must open it in Outlook automatically and send replies that appear to come from the mailbox itself. Which TWO permissions should you grant?',
-    opts: ['Full Access', 'Send As', 'Send on Behalf', 'Mailbox Import Export'],
+    opts: [
+      'Full Access',
+      'Send As',
+      'Send on Behalf',
+      'Mailbox Import Export',
+    ],
     ans: [0, 1],
     exp: 'Full Access lets members open the mailbox, and Outlook adds it automatically (automapping). Send As makes messages appear to come directly from ap@contoso.com.',
     why: ['', '', 'Send on Behalf shows "user on behalf of AP", which doesn\'t meet the requirement.', 'Mailbox Import Export is an admin role for PST operations, not for daily use.'],
-    feat: 'Shared mailboxes', ref: 'sharedMailbox',
+    feat: 'Shared mailboxes', ref: 'sharedMailbox', verified: '2026-11-19',
   },
   {
     id: 'D1-028', obj: '1.2.1', topic: 'Exchange Online mailboxes', diff: 'intermediate', type: 'single', scenario: true,
@@ -360,7 +387,7 @@ window.AB650.questions.push(
     ans: [0],
     exp: 'Shared mailboxes don\'t need a license up to 50 GB. To raise the limit to 100 GB the shared mailbox needs an Exchange Online Plan 2 license. Litigation hold needs Exchange Online Plan 2, or Plan 1 with the Exchange Online Archiving add-on.',
     why: ['', 'A distribution list has no mailbox storage and can\'t be placed on hold.', 'Unlicensed shared mailboxes are limited to 50 GB and can\'t be placed on litigation hold.', 'The shared mailbox itself needs the license, not its members.'],
-    feat: 'Shared mailbox licensing', ref: 'sharedMailboxAbout',
+    feat: 'Shared mailbox licensing', ref: 'sharedMailboxAbout', verified: '2026-11-19',
   },
   {
     id: 'D1-029', obj: '1.2.1', topic: 'Exchange Online mailboxes', diff: 'intermediate', type: 'order', scenario: true,
@@ -372,16 +399,21 @@ window.AB650.questions.push(
       'Remove the user\'s license',
     ],
     exp: 'Blocking sign-in stops further access straight away. Converting to a shared mailbox keeps the data without a license, as long as it stays under 50 GB. You then grant access, and remove the license last. If you removed it before converting, the mailbox would eventually be deleted.',
-    feat: 'Convert to shared mailbox', ref: 'convertShared',
+    feat: 'Convert to shared mailbox', ref: 'convertShared', verified: '2026-11-19',
   },
   {
     id: 'D1-030', obj: '1.2.2', topic: 'Microsoft Teams administration', diff: 'intermediate', type: 'single', scenario: true,
     q: 'Contoso engineers need to work in a single Teams channel with engineers from a partner organisation. The partner users must use their own Teams client and tenant without switching accounts. Which channel type should you create?',
-    opts: ['Shared channel', 'Private channel', 'Standard channel with guest access', 'A new team for each organisation'],
+    opts: [
+      'Shared channel',
+      'Private channel',
+      'Standard channel with guest access',
+      'A new team for each organisation',
+    ],
     ans: [0],
     exp: 'Shared channels use Microsoft Entra B2B direct connect. External participants work in the channel from their home tenant without switching. Cross-tenant access settings must allow B2B direct connect in both organisations.',
     why: ['', 'Private channels restrict access to a subset of the team\'s own members.', 'Guest access requires partners to switch into your tenant as guests.', 'Separate teams don\'t give a shared workspace.'],
-    feat: 'Teams shared channels', ref: 'sharedChannels',
+    feat: 'Teams shared channels', ref: 'sharedChannels', verified: '2026-11-19',
   },
   {
     id: 'D1-031', obj: '1.2.2', topic: 'Microsoft Teams administration', diff: 'easy', type: 'single', scenario: true,
@@ -395,7 +427,7 @@ window.AB650.questions.push(
     ans: [0],
     exp: 'Teams administrators can manage teams centrally, including changing members\' roles. Promoting a suitable member to owner restores management of the team. Microsoft recommends always having at least two owners.',
     why: ['', 'Recreating the team would lose conversation history and content structure.', 'Restoring a leaver\'s account to keep it as owner is a security risk.', 'Privacy settings don\'t create an owner.'],
-    feat: 'Teams admin center', ref: 'teamsManage',
+    feat: 'Teams admin center', ref: 'teamsManage', verified: '2026-11-19',
   },
   {
     id: 'D1-032', obj: '1.2.3', topic: 'Copilot in Teams meetings', diff: 'intermediate', type: 'single', scenario: true,
@@ -409,7 +441,7 @@ window.AB650.questions.push(
     ans: [0],
     exp: 'With "Only during the meeting", Copilot uses temporary speech-to-text data to answer questions during the meeting. No transcript is saved, and Copilot history isn\'t available after the meeting ends.',
     why: ['', '"During and after" needs a transcript, which is kept after the meeting.', 'Turning Copilot off removes the help the department wants.', 'Recording creates exactly the retained content the department wants to avoid.'],
-    feat: 'Copilot in Teams meetings', ref: 'teamsCopilot',
+    feat: 'Copilot in Teams meetings', ref: 'teamsCopilot', verified: '2026-11-19',
   },
   {
     id: 'D1-033', obj: '1.2.3', topic: 'Copilot in Teams meetings', diff: 'advanced', type: 'single', scenario: true,
@@ -423,7 +455,7 @@ window.AB650.questions.push(
     ans: [0],
     exp: 'When the organiser sets Copilot to Off for a meeting, Microsoft documents that licensed users can\'t use Copilot and nobody can record or transcribe that meeting. This gives organisers a simple way to stop AI processing and capture for sensitive sessions.',
     why: ['', 'Recording and transcription are also blocked in this configuration.', 'Copilot doesn\'t override the organiser\'s Off setting.', 'The organiser is also blocked from recording and transcribing.'],
-    feat: 'Copilot in Teams meetings', ref: 'teamsCopilot',
+    feat: 'Copilot in Teams meetings', ref: 'teamsCopilot', verified: '2026-11-19',
   },
   {
     id: 'D1-034', obj: '1.2.3', topic: 'Copilot in Teams meetings', diff: 'easy', type: 'single', scenario: false,
@@ -437,7 +469,7 @@ window.AB650.questions.push(
     ans: [0],
     exp: 'Transcription is controlled in the Recording & transcription section of the Teams meeting policy, or with Set-CsTeamsMeetingPolicy -AllowTranscription. The value works together with the organiser\'s Copilot meeting option to decide what Copilot can do.',
     why: ['', 'Themes are visual only.', 'Sharing settings apply to SharePoint and OneDrive content.', 'Acronyms tune Copilot Search results.'],
-    feat: 'Teams meeting policies', ref: 'teamsCopilot',
+    feat: 'Teams meeting policies', ref: 'teamsCopilot', verified: '2026-11-19',
   },
   {
     id: 'D1-035', obj: '1.2.4', topic: 'SharePoint sites and permissions', diff: 'intermediate', type: 'single', scenario: true,
@@ -451,7 +483,7 @@ window.AB650.questions.push(
     ans: [0],
     exp: 'Site-level sharing can be the same as or more restrictive than the organisation-level setting, never more permissive. Setting this site to "Existing guests" limits it without affecting other sites.',
     why: ['', 'Changing the organisation setting would affect every site.', 'Conditional Access controls how guests sign in, not which guests a site can be shared with.', '"Anyone" is more permissive than both requirements and needs an organisation setting that isn\'t enabled.'],
-    feat: 'SharePoint sharing settings', ref: 'spSharing',
+    feat: 'SharePoint sharing settings', ref: 'spSharing', verified: '2026-11-19',
   },
   {
     id: 'D1-036', obj: '1.2.4', topic: 'SharePoint sites and permissions', diff: 'easy', type: 'single', scenario: false,
@@ -465,16 +497,21 @@ window.AB650.questions.push(
     ans: [0],
     exp: 'Group-connected team sites inherit membership from the Microsoft 365 group (owners and members), which suits collaboration. Communication sites have a few authors and many readers, and use SharePoint groups instead of a Microsoft 365 group.',
     why: ['', 'Communication sites aren\'t group-connected.', 'Team sites can be shared externally if sharing settings allow it.', 'Communication sites support SharePoint permissions like any other site.'],
-    feat: 'SharePoint site types', ref: 'spSites',
+    feat: 'SharePoint site types', ref: 'spSites', verified: '2026-11-19',
   },
   {
     id: 'D1-037', obj: '1.2.5', topic: 'SharePoint Advanced Management', diff: 'intermediate', type: 'single', scenario: true,
     q: 'Before rolling out Microsoft 365 Copilot, you need to find SharePoint sites shared with "Everyone except external users" or containing widely shared links. Which SharePoint Advanced Management capability should you use first?',
-    opts: ['Data access governance (DAG) reports', 'Restricted SharePoint Search', 'Site lifecycle (inactive site) policy', 'Microsoft Search bookmarks'],
+    opts: [
+      'Data access governance (DAG) reports',
+      'Restricted SharePoint Search',
+      'Site lifecycle (inactive site) policy',
+      'Microsoft Search bookmarks',
+    ],
     ans: [0],
     exp: 'Data access governance reports in the SharePoint admin center find potentially overshared sites. Examples include sites with EEEU permissions, many sharing links, or sensitivity-labelled content. They are the discovery step before remediating with controls such as site access reviews, RAC or RCD.',
     why: ['', 'Restricted SharePoint Search limits search scope. It doesn\'t identify overshared sites.', 'Inactive site policies target stale sites, not oversharing.', 'Bookmarks promote content in search results.'],
-    feat: 'Data access governance reports', ref: 'dag',
+    feat: 'Data access governance reports', ref: 'dag', verified: '2026-11-19',
   },
   {
     id: 'D1-038', obj: '1.2.5', topic: 'SharePoint Advanced Management', diff: 'advanced', type: 'match', scenario: false,
@@ -486,7 +523,7 @@ window.AB650.questions.push(
       ['Find sites with "Everyone except external users" permissions', 'Data access governance report'],
     ],
     exp: 'These four controls work together for Copilot readiness. Data access governance reports find oversharing, and site access reviews hand clean-up to site owners. Restricted Access Control enforces group-based access, and Restricted Content Discovery hides a site from Copilot and organisation-wide search without changing permissions.',
-    feat: 'SharePoint Advanced Management', ref: 'samCopilot',
+    feat: 'SharePoint Advanced Management', ref: 'samCopilot', verified: '2026-11-19',
   },
   {
     id: 'D1-039', obj: '1.2.5', topic: 'SharePoint and OneDrive readiness for Copilot', diff: 'advanced', type: 'single', scenario: true,
@@ -500,24 +537,34 @@ window.AB650.questions.push(
     ans: [0],
     exp: 'Microsoft described Restricted SharePoint Search as a short-term solution that isn\'t meant for long-term use, and it is being retired. Since 31 July 2026 it can no longer be newly enabled. The lasting approach is to find oversharing with data access governance reports, then fix it with site access reviews and Restricted Access Control, and use Restricted Content Discovery for sites that shouldn\'t surface in Copilot.',
     why: ['', 'RSS applies to SharePoint organisation-wide search and Copilot, not just OneDrive.', 'No E5 requirement is the issue here. The feature is being retired.', 'RSS never deleted sites. It only limited what organisation-wide search could find.'],
-    feat: 'Restricted SharePoint Search', ref: 'rss',
+    feat: 'Restricted SharePoint Search', ref: 'rss', verified: '2026-11-19',
   },
   {
     id: 'D1-040', obj: '1.2.5', topic: 'Microsoft Search', diff: 'easy', type: 'single', scenario: true,
     q: 'Employees often search for "leave policy" but get dozens of outdated pages. You want the official HR policy page always shown at the top for that query. What should you configure?',
-    opts: ['A Microsoft Search bookmark for the HR policy page with "leave policy" keywords', 'Restricted Content Discovery on all other sites', 'A retention label on the outdated pages', 'A Teams app setup policy'],
+    opts: [
+      'A Microsoft Search bookmark for the HR policy page with "leave policy" keywords',
+      'Restricted Content Discovery on all other sites',
+      'A retention label on the outdated pages',
+      'A Teams app setup policy',
+    ],
     ans: [0],
     exp: 'Microsoft Search bookmarks, along with acronyms and Q&As, let admins promote authoritative results for specific keywords in Microsoft Search in SharePoint and Microsoft 365.',
     why: ['', 'RCD would hide large amounts of content just to fix one query.', 'Retention labels control how long content is kept, not search ranking.', 'App setup policies pin apps in Teams.'],
-    feat: 'Microsoft Search bookmarks', ref: 'msSearch',
+    feat: 'Microsoft Search bookmarks', ref: 'msSearch', verified: '2026-11-19',
   },
   {
     id: 'D1-041', obj: '1.2.5', topic: 'SharePoint and OneDrive readiness for Copilot', diff: 'intermediate', type: 'single', scenario: true,
     q: 'Copilot answers sometimes quote outdated project documents from sites that nobody has used for years. Which SharePoint Advanced Management capability helps reduce this content sprawl?',
-    opts: ['A site lifecycle (inactive site) policy that notifies owners and can archive or make inactive sites read-only', 'Restricted Access Control', 'Data loss prevention for Copilot', 'Network connectivity insights'],
+    opts: [
+      'A site lifecycle (inactive site) policy that notifies owners and can archive or make inactive sites read-only',
+      'Restricted Access Control',
+      'Data loss prevention for Copilot',
+      'Network connectivity insights',
+    ],
     ans: [0],
     exp: 'Inactive site policies find sites with no activity and ask owners to certify, archive or delete them. This keeps the content Copilot can draw on current and accurate.',
     why: ['', 'RAC controls who can access a site, not whether its content is stale.', 'DLP protects sensitive data. It doesn\'t remove outdated content.', 'Network insights don\'t relate to content quality.'],
-    feat: 'Site lifecycle management', ref: 'sam',
+    feat: 'Site lifecycle management', ref: 'sam', verified: '2026-11-19',
   },
 );

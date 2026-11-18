@@ -996,3 +996,10 @@ body.onboarding #app { visibility: hidden; }
 .menu-profile .mp-text span:last-child { font-size: 12px; color: var(--muted); }
 .menu-item > .avatar { flex: 0 0 auto; }
 .menu-item > .avatar + span { flex: 1; min-width: 0; text-align: left; }
+
+/* Optional hint in practice mode */
+.qx-hintbox { margin: 4px 0 12px; border: 1px dashed var(--border-strong); border-radius: 12px; padding: 8px 12px; background: var(--surface-2); }
+.qx-hintbox summary { cursor: pointer; display: flex; align-items: center; gap: 8px; color: var(--text-2); font-size: 13.5px; font-weight: 600; list-style: none; }
+.qx-hintbox summary::-webkit-details-marker { display: none; }
+.qx-hintbox summary .ic { width: 16px; height: 16px; color: var(--accent); }
+.qx-hintbox p { margin: 8px 0 2px; font-size: 14px; color: var(--text-2); line-height: 1.5; }

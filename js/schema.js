@@ -94,7 +94,27 @@
       modes: { mock: mode(modes.mock, 50, 100), final: mode(modes.final, 60, 120) },
       seed: isStr(e.seed) && e.seed ? e.seed : '',
       disclaimer: isStr(e.disclaimer) ? e.disclaimer : '',
+      // Question IDs taken out of the bank, mapped to their replacement ('' = removed without one).
+      // History stays stored; bookmarks move to the replacement (quiz-centre.js).
+      // Only stored when present, so certifications without retired questions keep their exact shape.
+      ...(isObj(e.retired) && Object.keys(e.retired).length ? { retired: Object.fromEntries(Object.entries(e.retired).filter(([, v]) => typeof v === 'string').map(([k, v]) => [String(k), v])) } : {}),
     };
+  }
+
+  // Where a certification's content comes from (shown in My Certifications, used for maintenance).
+  const isDate = (s) => isStr(s) && /^\d{4}-\d{2}-\d{2}$/.test(s);
+  function normaliseSource(s) {
+    if (!isObj(s)) return null;
+    const out = {
+      studyGuide: isUrl(s.studyGuide) ? s.studyGuide.trim() : '',
+      certification: isUrl(s.certification) ? s.certification.trim() : '',
+      skillsAsOf: isDate(s.skillsAsOf) ? s.skillsAsOf : '',
+      verifiedOn: isDate(s.verifiedOn) ? s.verifiedOn : '',
+      bankVersion: isStr(s.bankVersion) ? s.bankVersion.slice(0, 20) : '',
+      learningPaths: Array.isArray(s.learningPaths) ? s.learningPaths.filter((p) => isObj(p) && isUrl(p.url)).slice(0, 20).map((p) => ({ title: String(p.title || p.url).slice(0, 140), url: p.url.trim() })) : [],
+      notes: isStr(s.notes) ? s.notes.slice(0, 1000) : '',
+    };
+    return Object.values(out).some((v) => (Array.isArray(v) ? v.length : v)) ? out : null;
   }
   function clampInt(v, lo, hi, fallback) {
     const n = typeof v === 'number' ? v : parseFloat(v);
@@ -176,6 +196,8 @@
     if (!nonEmpty(q.exp)) warns.push(`${where} has no explanation ("exp").`);
     if (q.ref != null && ctx.refs && !ctx.refs[q.ref]) warns.push(`${where}: reference "${q.ref}" isn't defined in exam.refs.`);
     if (q.refUrl != null && !isUrl(q.refUrl)) errs.push(`${where}: "refUrl" must be an http(s) link.`);
+    if (q.hint != null && !isStr(q.hint)) warns.push(`${where}: "hint" should be text.`);
+    if (q.verified != null && !(isStr(q.verified) && /^\d{4}-\d{2}-\d{2}$/.test(q.verified))) warns.push(`${where}: "verified" should be a date (YYYY-MM-DD).`);
     return { errs, warns };
   }
 
@@ -247,6 +269,7 @@
       website: isUrl(c.website) ? c.website.trim() : '',
       studyGuideUrl: isUrl(c.studyGuideUrl) ? c.studyGuideUrl.trim() : '',
       contentVersion: isStr(c.contentVersion) ? c.contentVersion.slice(0, 20) : '1.0.0',
+      ...(normaliseSource(c.source) ? { source: normaliseSource(c.source) } : {}),
       exam: normaliseExam(c.exam),
       plan: normalisePlan(c.plan),
       resources: normaliseResources(c.resources),
@@ -420,7 +443,7 @@
   // Drop runtime-only fields so exports contain authored content only.
   function stripQuestion(q) {
     const out = {};
-    ['id', 'cert', 'domain', 'obj', 'topic', 'diff', 'type', 'scenario', 'q', 'opts', 'ans', 'pairs', 'exp', 'why', 'feat', 'ref', 'refUrl', 'refTitle'].forEach((k) => {
+    ['id', 'cert', 'domain', 'obj', 'topic', 'diff', 'type', 'scenario', 'q', 'opts', 'ans', 'pairs', 'exp', 'why', 'hint', 'feat', 'ref', 'refUrl', 'refTitle', 'verified'].forEach((k) => {
       if (q[k] !== undefined && q[k] !== '') out[k] = q[k];
     });
     return out;

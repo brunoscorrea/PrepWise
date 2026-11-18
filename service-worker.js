@@ -9,7 +9,7 @@
    and brunoscorrea.github.io/PrepWise/) never delete each other's caches. The
    name deliberately doesn't start with "prepwise-": v2.2 and earlier delete every
    "prepwise-*" cache that isn't their own when they activate. */
-const CACHE_VERSION = 'v2.3.0';
+const CACHE_VERSION = 'v2.4.0';
 const SCOPE = new URL(self.registration.scope).pathname; // e.g. "/PrepWise/"
 const CACHE_PREFIX = `prepwise:${SCOPE}:`;
 const CACHE_NAME = `${CACHE_PREFIX}${CACHE_VERSION}`;
@@ -43,6 +43,13 @@ const APP_SHELL = [
   './certifications/md-102/questions-d4.js',
   './certifications/md-102/questions-d5.js',
   './certifications/md-102/profile.js',
+  './certifications/ai-103/meta.js',
+  './certifications/ai-103/questions-d1.js',
+  './certifications/ai-103/questions-d2.js',
+  './certifications/ai-103/questions-d3.js',
+  './certifications/ai-103/questions-d4.js',
+  './certifications/ai-103/questions-d5.js',
+  './certifications/ai-103/profile.js',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',

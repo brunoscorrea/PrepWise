@@ -118,6 +118,8 @@ Sessions can also carry an optional study guide, shown in the session sheet (old
 | `why` | optional | One entry per option explaining why it's wrong (empty string for correct options). |
 | `obj`, `topic`, `diff`, `scenario`, `feat` | optional | Objective code, topic (used for weak-topic analysis), `easy`/`intermediate`/`advanced`, scenario flag, technology name. |
 | `ref` or `refUrl` + `refTitle` | optional | A key in `exam.refs`, or a direct link. |
+| `hint` | optional | A nudge shown in practice mode only (never in exam mode). Max 400 characters. |
+| `verified` | optional | `YYYY-MM-DD` the question was last checked against its official source. Shown as "Last verified" after answering. |
 
 ### Question bank file
 
@@ -151,7 +153,7 @@ Built-in exam outlines and banks are read-only in the app so updates can keep th
 
 ### Updating a built-in Microsoft profile when the exam outline changes
 
-The SC-300 and MD-102 outlines live in `certifications/<id>/meta.js` as data (domains and weightings, sections, objectives, reference links, Learn modules, and the `outline` date). The quiz engine doesn't need to change.
+The AB-650, AI-103, SC-300 and MD-102 outlines live in `certifications/<id>/meta.js` as data (domains and weightings, sections, objectives, reference links, Learn modules, and the `outline` date). The quiz engine doesn't need to change.
 
 1. Open the official study guide and compare its "Skills measured as of" date and change log with `outline` in `meta.js`.
 2. Update `domains[].weight`, `sections` and `objectives`, and set `outline.skillsAsOf` and `outline.checkedOn`.
@@ -160,3 +162,36 @@ The SC-300 and MD-102 outlines live in `certifications/<id>/meta.js` as data (do
 5. Bump `version` in `meta.js` and `CACHE_VERSION` in `service-worker.js`.
 
 Existing users keep their progress: question history is stored by question ID, so keep IDs stable and only add new ones.
+
+## Source of truth and content upgrades
+
+Each built-in Microsoft certification records where its content comes from, in `certification.source` (`meta.js` → `profile.js`):
+
+| Field | Meaning |
+|---|---|
+| `studyGuide` | Official study guide URL (the skills measured). |
+| `certification` | Official certification page URL. |
+| `skillsAsOf` | The study guide's "Skills measured as of" date. If the guide shows none, the page's last-updated date, said so in `notes`. |
+| `verifiedOn` | When the outline, references and bank were last checked against the official pages. |
+| `bankVersion` | Question bank version (also `contentVersion`). |
+| `learningPaths` | Official Microsoft Learn learning paths (`{ title, url }`). |
+| `notes` | Anything that couldn't be verified, or objectives that are ambiguous. |
+
+It shows in **My Certifications → Certification details → Source of truth**. Rules for built-in content:
+
+- **Microsoft Learn is the source of truth.** Only free, official links (learn.microsoft.com, aka.ms); no paid courses and no exam dumps. `tests/certs.js` fails on any other host in a built-in profile, and `tests/links.js` checks that every link resolves.
+- Every question has an objective (`obj`), a reference (`ref`) and a `verified` date. Objectives are copied word for word from the study guide.
+- Mark ambiguous objectives in `source.notes` rather than guessing what they cover.
+- Don't change the meaning of a question under an existing ID. When the correct answer changes, give the new question a new ID and map the old one in `exam.retired` (`{ "OLD-ID": "NEW-ID" }`). Quiz history for the old ID stays stored; bookmarks move to the new question.
+
+### Upgrading content for existing users
+
+When a built-in's `contentVersion` changes, the app updates the exam content and question bank, and applies `migrate` from `profile.js` to each profile's stored copy, without touching anything the learner made:
+
+| `migrate` field | Effect |
+|---|---|
+| `oldWeeks` | The previous plan's week titles and session topics. A session whose topic still matches the old default gets the new topic and study guide; a topic the learner renamed is left as it is. Status, time, notes and dates are never changed. |
+| `courseUrlPattern` | If the learner's "Continue course" link matches, it is replaced with the new `course` resource; their own link is kept. |
+| `removeResourceHosts` | Built-in resources are replaced by the new ones; resources the learner added are kept unless they point at one of these hosts. |
+
+A study plan the learner imported (`planSource: 'local'`) is never replaced. `tests/content-upgrade.js` runs the previous release, studies in it, then opens the current build on the same storage and checks all of this.

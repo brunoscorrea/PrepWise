@@ -49,6 +49,12 @@ const QUIZ = (cert) => `PrepWise.switchCert('${cert}', { toast: false, view: 'qu
   const s = QC.qs().active; s.items.forEach((it, i) => { const q = QC.QMAP.get(it.q); s.resp[i] = q.type === 'single' || q.type === 'multi' ? [...q.ans] : [...Array((q.type === 'order' ? q.opts : q.pairs).length).keys()]; });
   QC.finishSession(); await new Promise((r) => setTimeout(r, 150)); return PrepWise.store.progress['${cert}'].quiz.attempts.length;`;
 const STORAGE = 'const o = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); o[k] = localStorage.getItem(k); } return o;';
+// SC-300 and MD-102 byte for byte; for AB-650 everything the learner produced (results, notes, time, bookmarks).
+function sameStudy(a, b) {
+  const x = JSON.parse(a); const y = JSON.parse(b);
+  const mine = (p) => p && JSON.stringify({ quiz: p.quiz, notes: p.notes, s: p.sessions.map((q) => [q.id, q.status, q.actualSec, q.notes, q.completedOn]) });
+  return ['sc-300', 'md-102'].every((id) => JSON.stringify(x[id]) === JSON.stringify(y[id])) && mine(x['ab-650']) === mine(y['ab-650']);
+}
 const PROGRESS = "const o = {}; for (const p of PrepWise.profiles) { o[p.name] = p.id; } return { active: PrepWise.profile.name, profiles: o, progress: JSON.stringify(PrepWise.store.progress) };";
 const CACHES = 'const out = {}; for (const k of await caches.keys()) out[k] = (await (await caches.open(k)).keys()).map((r) => new URL(r.url).pathname); return out;';
 
@@ -101,9 +107,12 @@ async function openFresh(p, url) { await p.goto('about:blank'); await p.goto(url
     t('new site: no welcome screen — the existing profile opens', !(await A.eval("return !!document.getElementById('onboard-root')")) && (await A.eval("return document.querySelector('#topbar-title').textContent")) === 'Good afternoon, Bruno');
     const after = await A.eval(PROGRESS);
     t('new site: both profiles carried over (same origin, same storage)', JSON.stringify(after.profiles) === JSON.stringify(before.profiles));
-    t('new site: Bruno\'s AB-650, SC-300 and MD-102 progress identical', after.progress === before.progress);
+    // The new build also moves AB-650 to Microsoft Learn (tests/content-upgrade.js covers that in
+    // detail): default topics and the course link change, everything the learner did stays.
+    t('new site: Bruno\'s SC-300 and MD-102 progress identical, AB-650 study history identical', sameStudy(after.progress, before.progress), 'progress differs');
     const storeAfter = await A.eval(STORAGE);
-    t('new site: no user data key was changed by opening the new site', Object.keys(storeBefore).every((k) => k === 'prepwise:profiles' || storeAfter[k] === storeBefore[k]));
+    const changed = Object.keys(storeBefore).filter((k) => k !== 'prepwise:profiles' && storeAfter[k] !== storeBefore[k]);
+    t('new site: only profile stores changed, and only by the AB-650 content upgrade', changed.every((k) => { try { const x = JSON.parse(storeBefore[k]); const y = JSON.parse(storeAfter[k]); return !!x.progress && sameStudy(JSON.stringify(y.progress), JSON.stringify(x.progress)) && ['sc-300', 'md-102'].every((id) => JSON.stringify(x.certs[id]) === JSON.stringify(y.certs[id])); } catch (e) { return false; } }), changed.join());
     const sam = await A.eval(`return JSON.parse(localStorage.getItem('prepwise:p:${before.profiles.Sam}:store')).progress['sc-300'].quiz.attempts.length`);
     t('new site: Sam\'s SC-300 history carried over', sam === 1);
 
@@ -121,7 +130,7 @@ async function openFresh(p, url) { await p.goto('about:blank'); await p.goto(url
     const newCache = `prepwise:/PrepWise/:${v1.version}`;
     const shellFiles = fs.readdirSync(dirs.neu, { recursive: true }).filter((f) => fs.statSync(path.join(dirs.neu, f)).isFile() && !f.startsWith('.') && f !== 'service-worker.js').map((f) => `/PrepWise/${f.split(path.sep).join('/')}`);
     t(`PWA: new cache "${newCache}" holds every app file (${shellFiles.length})`, cs[newCache] && shellFiles.filter((f) => f !== '/PrepWise/index.html').every((f) => cs[newCache].includes(f)) && cs[newCache].includes('/PrepWise/'), JSON.stringify(Object.keys(cs)));
-    t('PWA: all 18 certification files precached', (cs[newCache] || []).filter((f) => f.startsWith('/PrepWise/certifications/')).length === 18);
+    t('PWA: all 25 certification files precached', (cs[newCache] || []).filter((f) => f.startsWith('/PrepWise/certifications/')).length === 25);
     t('cache isolation: the new site did NOT delete the old site\'s cache', !!cs[`prepwise-${oldVersion}`] && cs[`prepwise-${oldVersion}`].every((f) => f.startsWith('/m365-study-tracker/')));
     t('cache isolation: no cache mixes files from both sites', Object.values(cs).every((list) => !(list.some((f) => f.startsWith('/PrepWise/')) && list.some((f) => f.startsWith('/m365-study-tracker/')))));
     t('build: tests, docs and fixtures are not published', !fs.existsSync(path.join(dirs.neu, 'tests')) && !fs.existsSync(path.join(dirs.neu, 'docs')) && !fs.existsSync(path.join(dirs.neu, 'README.md')));
