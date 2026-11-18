@@ -1,4 +1,4 @@
-// Validates the built-in SC-300 and MD-102 profiles and writes docs/COVERAGE.md.
+// Validates the built-in AB-650, SC-300, MD-102 and AI-103 profiles and writes docs/COVERAGE.md.
 // Usage: node tests/certs.js            (Node 18+, no network needed)
 const path = require('path');
 const fs = require('fs');
@@ -11,10 +11,13 @@ const load = (id, files) => { try { files.forEach((f) => require(path.join(ROOT,
 load('ab-650', ['meta', 'questions-d1', 'questions-d2', 'questions-d3', 'profile']);
 load('sc-300', ['meta', 'questions-d1', 'questions-d2', 'questions-d3', 'questions-d4', 'profile']);
 load('md-102', ['meta', 'questions-d1', 'questions-d2', 'questions-d3', 'questions-d4', 'questions-d5', 'profile']);
+load('ai-103', ['meta', 'questions-d1', 'questions-d2', 'questions-d3', 'questions-d4', 'questions-d5', 'profile']);
 const builtins = Object.fromEntries(window.PrepWiseBuiltins.map((b) => [b.certification.id, b]));
 
 // Official values from the study guides (checked 18 Nov 2026)
 const OFFICIAL = {
+  'ab-650': { weights: { 1: [20, 25], 2: [40, 45], 3: [35, 40] }, objectives: 58, files: 3, skillsAsOf: '2026-07-27' },
+  'ai-103': { weights: { 1: [25, 30], 2: [30, 35], 3: [10, 15], 4: [10, 15], 5: [10, 15] }, objectives: 64, files: 5, skillsAsOf: '2026-04-16' },
   'sc-300': { weights: { 1: [20, 25], 2: [25, 30], 3: [20, 25], 4: [20, 25] }, objectives: 98, files: 4 },
   'md-102': { weights: { 1: [20, 25], 2: [25, 30], 3: [15, 20], 4: [15, 20], 5: [10, 15] }, objectives: 83, files: 5 },
 };
@@ -29,7 +32,8 @@ const abIds = new Set(abQs.map((q) => q.id));
 const abTexts = new Set(abQs.map((q) => norm(q.q)));
 const report = [];
 
-for (const id of ['sc-300', 'md-102']) {
+const ALL = ['ab-650', 'sc-300', 'md-102', 'ai-103'];
+for (const id of ALL) {
   const b = builtins[id];
   const O = OFFICIAL[id];
   t(`${id}: profile registered and normalises`, () => {
@@ -63,7 +67,8 @@ for (const id of ['sc-300', 'md-102']) {
   t(`${id}: every question carries all required metadata`, () => {
     raw.forEach((q, i) => {
       const w = `${q.id || i}`;
-      assert.ok(q.id && q.id.startsWith(C.replace('-', '') + '-'), `${w} id prefix`);
+      // AB-650 keeps its original IDs (D1-001…) so existing quiz history stays linked.
+      assert.ok(q.id && (id === 'ab-650' ? /^D\d-\d{3}$/.test(q.id) : q.id.startsWith(C.replace('-', '') + '-')), `${w} id prefix`);
       assert.equal(q.cert, id, `${w} cert`);
       assert.ok(exam.objectives[q.obj], `${w} obj ${q.obj}`);
       assert.ok(q.topic && q.topic.length > 2, `${w} topic`);
@@ -115,10 +120,12 @@ for (const id of ['sc-300', 'md-102']) {
     assert.equal(new Set(raw.map((q) => q.id)).size, raw.length);
     assert.equal(new Set(raw.map((q) => norm(q.q))).size, raw.length);
   });
-  t(`${id}: no question leakage from AB-650 or the other new profile`, () => {
-    raw.forEach((q) => { assert.ok(!abIds.has(q.id), `${q.id} reuses an AB-650 id`); assert.ok(!abTexts.has(norm(q.q)), `${q.id} reuses AB-650 text`); });
-    const other = builtins[id === 'sc-300' ? 'md-102' : 'sc-300'];
-    if (other) { const oIds = new Set(other.questions().map((q) => q.id)); raw.forEach((q) => assert.ok(!oIds.has(q.id), `${q.id} shared with other cert`)); }
+  t(`${id}: no question IDs or texts shared with any other certification`, () => {
+    ALL.filter((o) => o !== id && builtins[o]).forEach((o) => {
+      const oq = builtins[o].questions();
+      const oIds = new Set(oq.map((q) => q.id)); const oTexts = new Set(oq.map((q) => norm(q.q)));
+      raw.forEach((q) => { assert.ok(!oIds.has(q.id), `${q.id} shared with ${o}`); assert.ok(!oTexts.has(norm(q.q)), `${q.id} text shared with ${o}`); });
+    });
   });
   t(`${id}: at least 40% scenario-based`, () => { const p = qs.filter((q) => q.scenario).length / qs.length; assert.ok(p >= 0.4, (p * 100).toFixed(1) + '%'); });
   t(`${id}: all difficulty levels and question types used`, () => {
@@ -197,7 +204,8 @@ for (const id of ['sc-300', 'md-102']) {
   lines.push(`## ${cert.code} — ${cert.name}`, '');
   lines.push(`- Official study guide: ${cert.studyGuideUrl}`);
   const meta = window[id.replace('-', '').toUpperCase()].outline;
-  lines.push(`- Outline version: ${meta.label} (checked ${meta.checkedOn})`);
+  if (meta) lines.push(`- Outline version: ${meta.label} (checked ${meta.checkedOn})`);
+  if (cert.source) lines.push(`- Skills measured as of: ${cert.source.skillsAsOf} · content verified: ${cert.source.verifiedOn} · question bank version: ${cert.source.bankVersion}`);
   lines.push(`- Questions: **${qs.length}** · scenario-based: **${scen} (${((scen / qs.length) * 100).toFixed(0)}%)**`);
   lines.push(`- Types: ${Object.entries(types).map(([k, v]) => `${k} ${v}`).join(' · ')}`);
   lines.push(`- Difficulty: ${['easy', 'intermediate', 'advanced'].map((k) => `${k} ${diffs[k] || 0}`).join(' · ')}`, '');
@@ -210,12 +218,44 @@ for (const id of ['sc-300', 'md-102']) {
   report.push(lines.join('\n'));
 }
 
-// AB-650 preserved
-t('ab-650: bank unchanged (167 questions, validates)', () => {
-  assert.equal(abQs.length, 167);
+// ---- Source of truth, traceability and the AB-650 audit ----
+for (const id of ['ab-650', 'ai-103']) {
+  const c = S.normaliseCertification(builtins[id].certification);
+  t(`${id}: source of truth recorded (study guide, certification, skills date, verified date, bank version, learning paths)`, () => {
+    const src = c.source;
+    assert.ok(src, 'no source block');
+    assert.ok(/^https:\/\/learn\.microsoft\.com\/en-us\/credentials\/certifications\/resources\/study-guides\//.test(src.studyGuide), 'study guide');
+    assert.ok(/^https:\/\/learn\.microsoft\.com\/en-us\/credentials\/certifications\//.test(src.certification), 'certification page');
+    assert.equal(src.skillsAsOf, OFFICIAL[id].skillsAsOf);
+    assert.ok(/^\d{4}-\d{2}-\d{2}$/.test(src.verifiedOn), 'verified date');
+    assert.ok(src.bankVersion, 'bank version');
+    assert.ok(src.learningPaths.length >= 3 && src.learningPaths.every((l) => l.url.startsWith('https://learn.microsoft.com/en-us/training/paths/')), 'learning paths');
+  });
+  t(`${id}: every question has a last-verified date`, () => builtins[id].questions().forEach((q) => assert.ok(/^\d{4}-\d{2}-\d{2}$/.test(q.verified || ''), q.id)));
+  t(`${id}: only free Microsoft Learn resources and links (no paid course providers)`, () => {
+    const all = JSON.stringify({ r: c.resources, p: c.plan, refs: c.exam.refs });
+    assert.ok(!/udemy|coursera|pluralsight|linkedin\.com\/learning/i.test(all), 'paid provider link found');
+    c.resources.forEach((r) => assert.ok(/^https:\/\/(learn\.microsoft\.com|aka\.ms)\//.test(r.url), r.url));
+  });
+}
+t('ai-103: every question has a hint', () => builtins['ai-103'].questions().forEach((q) => assert.ok(q.hint && q.hint.length > 5, q.id)));
+t('ab-650: audited bank — 169 questions, validates, retired IDs mapped to existing replacements', () => {
+  assert.equal(abQs.length, 169);
   const c = S.normaliseCertification(ab.certification);
   assert.deepEqual(S.validateQuestions(abQs, c.exam).errors, []);
-  assert.ok(c.plan.weeks.every((w) => w.sessions.every((s) => !('links' in s) && !('exercise' in s))), 'AB-650 plan shape changed');
+  const ret = c.exam.retired;
+  assert.equal(Object.keys(ret).length, 6);
+  Object.entries(ret).forEach(([old, nu]) => { assert.ok(!abIds.has(old), `${old} still in bank`); assert.ok(abIds.has(nu), `${nu} missing`); });
+});
+t('ab-650: no Udemy or lecture wording anywhere in the AB-650 experience (plan, resources, questions)', () => {
+  const c = S.normaliseCertification(ab.certification);
+  const txt = JSON.stringify({ plan: c.plan, res: c.resources, desc: c.description, q: abQs, refs: c.exam.refs });
+  assert.ok(!/udemy|lecture/i.test(txt), (txt.match(/.{0,60}(udemy|lecture).{0,60}/i) || [''])[0]);
+});
+t('ab-650: upgrade migration defined for content 1.x (Udemy host, course link pattern, old topics)', () => {
+  const m = ab.migrate;
+  assert.ok(m && m.removeResourceHosts.includes('udemy.com') && new RegExp(m.courseUrlPattern).test('https://www.udemy.com/course/ms100course/learn/lecture/57913107#content'));
+  assert.equal(m.oldWeeks.length, 4); m.oldWeeks.forEach((w) => assert.equal(w.topics.length, 7));
 });
 
 const out = ['# Question bank coverage report', '', `Generated by \`node tests/certs.js\` on ${new Date().toISOString().slice(0, 10)}. ⚠ marks objectives with a single question.`, '', ...report].join('\n');

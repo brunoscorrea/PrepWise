@@ -116,6 +116,9 @@
     if (q.active === undefined) q.active = null;
     // Only prune against a loaded bank, so a missing bank never wipes bookmarks.
     if (QS.length) {
+      // Bookmarks on a question that was replaced move to its replacement (exam.retired).
+      const retired = X().retired || {};
+      if (q.flagged.some((id) => retired[id])) q.flagged = [...new Set(q.flagged.map((id) => (retired[id] && QMAP.has(retired[id]) ? retired[id] : id)))];
       if (q.active && (!Array.isArray(q.active.items) || q.active.items.some((it) => !QMAP.has(it.q)))) q.active = null;
       q.flagged = q.flagged.filter((id) => QMAP.has(id));
     }
@@ -487,6 +490,7 @@
         ${q.feat ? `<div><span class="k">Technology</span><span>${esc(q.feat)}</span></div>` : ''}
         ${q.obj ? `<div><span class="k">Exam objective</span><span>${esc(q.obj)}${X().objectives[q.obj] ? ` · ${esc(X().objectives[q.obj])}` : ''}</span></div>` : `<div><span class="k">Topic</span><span>${esc(q.topic)}</span></div>`}
         ${sectionOf(q.obj) ? `<div><span class="k">Section</span><span>${esc(sectionOf(q.obj))}</span></div>` : ''}
+        ${q.verified ? `<div><span class="k">Last verified</span><span>${esc(A.fmtDate(q.verified, { day: 'numeric', month: 'short', year: 'numeric' }))} against Microsoft Learn</span></div>` : ''}
       </div>
       ${ref ? `<a class="btn btn-sm qx-learn" href="${esc(ref.url)}" target="_blank" rel="noopener">${icon('external')} ${esc(refLabel(ref))}</a>` : ''}
     </div>`;
@@ -524,6 +528,7 @@
         ${chipRow(q)}
         <div class="qx-q">${esc(q.q)}</div>
         <div class="qx-hint">${instruction(q)}</div>
+        ${!s.exam && !submitted && q.hint ? `<details class="qx-hintbox"><summary>${icon('info')}Show a hint</summary><p>${esc(q.hint)}</p></details>` : ''}
         ${optionsHTML(q, it, r, reveal, reveal)}
         ${reveal ? explanationHTML(q, r) : ''}
       </div>

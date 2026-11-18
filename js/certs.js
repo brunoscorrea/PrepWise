@@ -231,6 +231,7 @@
     }
     A.snapshot(`Before replacing ${rec.code} study plan`);
     rec.plan = clone(d.plan);
+    rec.planSource = 'local'; // app content updates no longer replace this plan
     if (d.resources && d.resources.length) rec.resources = clone(d.resources);
     rec.updatedAt = new Date().toISOString();
     const fresh = A.defaultProgress(rec);
@@ -562,6 +563,13 @@
         ${c.website ? `<a class="btn btn-sm" href="${esc(c.website)}" target="_blank" rel="noopener">${icon('globe')} Certification website</a>` : ''}
         ${c.studyGuideUrl ? `<a class="btn btn-sm" href="${esc(c.studyGuideUrl)}" target="_blank" rel="noopener">${icon('book')} Study guide</a>` : ''}
       </div>
+      ${c.source ? `<div class="group-label">Source of truth</div>
+      <div class="pv-grid src-grid">
+        ${c.source.skillsAsOf ? `<div><span class="k">Skills measured as of</span><span class="v">${esc(A.fmtDate(c.source.skillsAsOf, { day: 'numeric', month: 'short', year: 'numeric' }))}</span></div>` : ''}
+        ${c.source.verifiedOn ? `<div><span class="k">Content last verified</span><span class="v">${esc(A.fmtDate(c.source.verifiedOn, { day: 'numeric', month: 'short', year: 'numeric' }))}</span></div>` : ''}
+        ${c.source.bankVersion ? `<div><span class="k">Question bank version</span><span class="v num">${esc(c.source.bankVersion)}</span></div>` : ''}
+      </div>
+      ${c.source.learningPaths.length ? `<ul class="guide-list small" style="margin-top:8px">${c.source.learningPaths.map((p) => `<li><a href="${esc(p.url)}" target="_blank" rel="noopener noreferrer">${icon('external')}${esc(p.title)}</a></li>`).join('')}</ul>` : ''}` : ''}
       <div class="tiny muted" style="margin-top:10px">ID <code>${esc(c.id)}</code> · ${c.builtin ? 'Built-in profile' : 'Created on this device'} · question bank ${c.bankSource === 'builtin' ? 'built in' : 'stored on this device'}</div>
       <div class="group-label">Manage</div>
       <div class="action-grid">

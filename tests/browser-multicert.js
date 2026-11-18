@@ -39,7 +39,7 @@
       const store = A().store;
       t('fresh install: storage really started empty (no prior progress)', ['ab-650', 'sc-300', 'md-102'].every((id) => !store.progress[id] || !(store.progress[id].quiz && store.progress[id].quiz.attempts && store.progress[id].quiz.attempts.length)));
       t('fresh install: AB-650, SC-300 and MD-102 built-ins present', ['ab-650', 'sc-300', 'md-102'].every((id) => store.certs[id] && store.certs[id].builtin === id));
-      t('fresh install: question counts 167 / ≥120 / ≥120', A().getQuestions('ab-650').length === 167 && A().getQuestions('sc-300').length >= 120 && A().getQuestions('md-102').length >= 120,
+      t('fresh install: question counts 169 / ≥120 / ≥120 / 216', A().getQuestions('ab-650').length === 169 && A().getQuestions('ai-103').length === 216 && A().getQuestions('sc-300').length >= 120 && A().getQuestions('md-102').length >= 120,
         [A().getQuestions('ab-650').length, A().getQuestions('sc-300').length, A().getQuestions('md-102').length].join('/'));
       A().switchCert('ab-650', { toast: false, view: 'home' }); await wait(200);
       const s0 = A().state.sessions[0];
@@ -59,7 +59,7 @@
       const store = A().store;
       t('upgrade: SC-300 and MD-102 installed automatically', !!store.certs['sc-300'] && !!store.certs['md-102']);
       t('upgrade: AB-650 progress byte-for-byte unchanged', JSON.stringify(store.progress['ab-650']) === st.tmp.ab);
-      t('upgrade: AB-650 bank unchanged (167 ids, same order)', ids(A().getQuestions('ab-650')).join(',') === st.tmp.abBankIds);
+      t('upgrade: AB-650 bank unchanged (169 ids, same order)', ids(A().getQuestions('ab-650')).join(',') === st.tmp.abBankIds);
       const abAttempts = store.progress['ab-650'].quiz.attempts.length;
 
       for (const [id, prefix, nDom] of [['sc-300', 'SC300-', 4], ['md-102', 'MD102-', 5]]) {

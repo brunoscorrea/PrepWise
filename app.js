@@ -29,7 +29,7 @@
   let BANK_PREFIX = K.bankPrefix;
   let SNAP_KEY = K.snaps;
   let suspended = false;         // true while switching/deleting profiles: nothing is written
-  const APP_VERSION = '2.3.0';
+  const APP_VERSION = '2.4.0';
   const APP_NAME = 'PrepWise';
   const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -169,7 +169,8 @@
   (window.PrepWiseBuiltins || []).forEach((b) => {
     try {
       const c = S.normaliseCertification(b.certification);
-      BUILTINS.set(c.id, { cert: c, questions: b.questions });
+      // `migrate` (optional) describes how to upgrade stored data from an earlier content version.
+      BUILTINS.set(c.id, { cert: c, questions: b.questions, migrate: b.migrate || null });
     } catch (e) { console.error('Invalid built-in profile', e); }
   });
 
@@ -217,13 +218,67 @@
     return store.certs[id];
   }
 
+  // Built-in certifications whose content was upgraded during this load; their progress is
+  // migrated once it has been normalised (see applyContentUpgrades).
+  const pendingUpgrades = new Map();
+
   function ensureBuiltins() {
     BUILTINS.forEach((b, id) => {
       const rec = store.certs[id];
       if (!rec) { if (!store.deletedBuiltins.includes(id)) installBuiltin(id); return; }
+      if (rec.builtin !== id) return;
       // Keep built-in exam content in step with app updates unless the user replaced it.
-      if (rec.builtin === id && rec.examSource === 'builtin') rec.exam = clone(b.cert.exam);
+      if (rec.examSource === 'builtin') rec.exam = clone(b.cert.exam);
+      // Source-of-truth metadata always follows the app (absent for certifications that have none).
+      if (b.cert.source) rec.source = clone(b.cert.source); else delete rec.source;
+      if (rec.contentVersion !== b.cert.contentVersion) upgradeBuiltinContent(id, rec, b);
     });
+  }
+
+  // A built-in certification's content changed (new contentVersion). App-provided content is
+  // refreshed; anything the user created or changed is kept. No progress is reset.
+  function upgradeBuiltinContent(id, rec, b) {
+    const c = b.cert, m = b.migrate || {};
+    const from = rec.contentVersion;
+    Object.assign(rec, { name: c.name, description: c.description, website: c.website, studyGuideUrl: c.studyGuideUrl });
+    // Resources: the app's own set is replaced; resources the user added (ids "r-…") are kept,
+    // unless they point at a host the content no longer uses (for example a retired paid course).
+    const dropHost = (u) => (m.removeResourceHosts || []).some((h) => { try { const host = new URL(u).hostname; return host === h || host.endsWith(`.${h}`); } catch (e) { return false; } });
+    const own = (rec.resources || []).filter((r) => String(r.id).startsWith('r-') && !dropHost(r.url));
+    rec.resources = [...clone(c.resources), ...own];
+    // The plan template follows the app unless the user imported their own plan.
+    if (rec.planSource !== 'local') rec.plan = clone(c.plan);
+    rec.contentVersion = c.contentVersion;
+    rec.updatedAt = new Date().toISOString();
+    pendingUpgrades.set(id, { from, migrate: m });
+  }
+
+  // Migrate a certification's progress after a content upgrade. Only untouched defaults change:
+  // a session topic or week title is renamed only when it still has the old default text,
+  // and the course link only when it is a link the app itself used to provide.
+  function applyContentUpgrades() {
+    pendingUpgrades.forEach(({ migrate: m }, id) => {
+      const rec = store.certs[id], p = store.progress[id];
+      if (!rec || !p) return;
+      const tmpl = rec.plan.weeks;
+      (m.oldWeeks || []).forEach((old, wi) => {
+        const wk = p.weeks[wi], nw = tmpl[wi];
+        if (!nw) return;
+        if (wk && wk.title === old.title) wk.title = nw.title;
+        p.sessions.filter((s) => s.week === wi + 1 && s.order === 0 && s.topic === (old.topics || [])[s.day]).forEach((s) => {
+          const si = (nw.sessions || []).findIndex((t) => t.day === s.day);
+          if (si < 0) return;
+          s.topic = nw.sessions[si].topic;
+          s.tpl = `${wi}:${si}`;
+        });
+      });
+      if (m.courseUrlPattern && new RegExp(m.courseUrlPattern, 'i').test(p.settings.courseUrl || '')) {
+        const course = rec.resources.find((r) => r.type === 'course' && r.url);
+        p.settings.courseUrl = course ? course.url : '';
+      }
+      if (m.courseUrlPattern && p.course && new RegExp(m.courseUrlPattern, 'i').test(p.course.resumeUrl || '')) p.course.resumeUrl = '';
+    });
+    pendingUpgrades.clear();
   }
 
   // ----- Progress (personal) -----
@@ -351,6 +406,9 @@
     if (!store.certs['ab-650']) installBuiltin('ab-650');
     const c = resolveCert('ab-650');
     store.progress['ab-650'] = normaliseProgress(v1, c);
+    // v1 data has the original session topics and course link: migrate them like an upgrade.
+    const b650 = BUILTINS.get('ab-650');
+    if (b650 && b650.migrate) pendingUpgrades.set('ab-650', { from: 'v1', migrate: b650.migrate });
     st.settings.name = (v1.settings && v1.settings.name) || '';
     st.settings.installDismissed = !!(v1.ui && v1.ui.installDismissed);
     st.settings.defaultCert = 'ab-650';
@@ -370,7 +428,7 @@
     Object.keys(st.certs).forEach((id) => {
       if (!S.isValidCertId(id)) { delete st.certs[id]; return; }
       const r = st.certs[id];
-      st.certs[id] = { ...certRecord(r), builtin: r.builtin || null, examSource: r.examSource || 'local', bankSource: r.bankSource || 'local', archived: !!r.archived, createdAt: r.createdAt || new Date().toISOString(), updatedAt: r.updatedAt || new Date().toISOString(), id };
+      st.certs[id] = { ...certRecord(r), builtin: r.builtin || null, examSource: r.examSource || 'local', bankSource: r.bankSource || 'local', ...(r.planSource === 'local' ? { planSource: 'local' } : {}), archived: !!r.archived, createdAt: r.createdAt || new Date().toISOString(), updatedAt: r.updatedAt || new Date().toISOString(), id };
     });
     st.schema = S.STORE_VERSION;
     return st;
@@ -413,6 +471,7 @@
     }
     // Make sure every certification has progress, and pick the starting certification.
     Object.keys(store.certs).forEach((id) => { store.progress[id] = normaliseProgress(store.progress[id], resolveCert(id)); });
+    applyContentUpgrades();
     Object.keys(store.progress).forEach((id) => { if (!store.certs[id]) delete store.progress[id]; });
     let start = store.settings.selector === 'default' && store.settings.defaultCert ? store.settings.defaultCert : store.activeCert;
     if (!store.certs[start] || store.certs[start].archived) start = firstCertId();
@@ -2333,6 +2392,7 @@
     if (profile && profile.name) store.settings.name = profile.name; else if (keepName) store.settings.name = keepName;
     ensureBuiltins();
     Object.keys(store.certs).forEach((id) => { store.progress[id] = normaliseProgress(store.progress[id], store.certs[id]); });
+    applyContentUpgrades();
     activate(store.certs[store.activeCert] ? store.activeCert : firstCertId());
     hooks.load.forEach((fn) => fn(state));
     hooks.certChange.forEach((fn) => fn(cert, state));
@@ -2382,6 +2442,8 @@
     if (e.key === STORE_KEY && e.newValue) {
       try {
         store = normaliseStore(JSON.parse(e.newValue)); bankCache.clear(); ensureBuiltins();
+        Object.keys(store.certs).forEach((id) => { store.progress[id] = normaliseProgress(store.progress[id], store.certs[id]); });
+        applyContentUpgrades();
         activate(store.certs[store.activeCert] ? store.activeCert : firstCertId());
         hooks.load.forEach((fn) => fn(state)); hooks.certChange.forEach((fn) => fn(cert, state));
         if (!sheetOpen) renderCurrent();

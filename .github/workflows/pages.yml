@@ -41,7 +41,7 @@ jobs:
         run: google-chrome --version
       - name: Unit tests
         run: node tests/unit.js
-      - name: Certification content (SC-300, MD-102, AB-650)
+      - name: Certification content (AB-650, AI-103, SC-300, MD-102)
         run: node tests/certs.js
       - name: Profile storage and personal-information scan
         run: node tests/profiles-unit.js
@@ -53,6 +53,8 @@ jobs:
         run: node tests/run-multicert.js
       - name: Browser — GitHub Pages hosting at /PrepWise/ (scope, offline, updates, shared origin)
         run: node tests/pages.js
+      - name: Browser — AB-650 Microsoft Learn upgrade and AI-103 integration
+        run: node tests/content-upgrade.js
 
   playwright:
     # The original Python Playwright suites (e2e, layout at 4 sizes, PWA, multi-cert).
