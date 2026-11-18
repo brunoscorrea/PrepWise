@@ -2,3 +2,5 @@ tests/dl/
 tests/shots/
 __pycache__/
 _site/
+.claude/
+_to_delete/

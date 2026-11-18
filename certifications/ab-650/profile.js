@@ -77,7 +77,7 @@
       resources: [
         { id: 'study-guide', title: 'Official AB-650 study guide', url: B.studyGuideUrl, type: 'study-guide', notes: 'Skills measured, domain weightings and Microsoft Learn links.' },
         { id: 'exam-page', title: 'AB-650 exam page', url: 'https://learn.microsoft.com/en-us/credentials/certifications/exams/ab-650', type: 'documentation', notes: 'Scheduling, languages and free training.' },
-        { id: 'udemy-ms100', title: 'Udemy course (MS-100 series)', url: 'https://www.udemy.com/course/ms100course/learn/lecture/57913107#content', type: 'course', notes: 'Main video course for the 4-week programme.' },
+        { id: 'udemy-ms100', title: 'Udemy course (MS-100 series)', url: 'https://www.udemy.com/course/ms100course/', type: 'course', notes: 'Main video course for the 4-week programme.' },
         { id: 'exam-sandbox', title: 'Exam sandbox (try the exam interface)', url: 'https://aka.ms/examdemo', type: 'practice-test', notes: '' },
         { id: 'scoring', title: 'Exam scoring and score reports', url: 'https://learn.microsoft.com/en-us/credentials/certifications/exam-scoring-reports', type: 'documentation', notes: '' },
       ],
