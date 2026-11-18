@@ -7,7 +7,8 @@ srv = subprocess.Popen([sys.executable, '-m', 'http.server', str(PORT), '-d', AP
 SRC = open(os.path.join(HERE, 'browser-multicert.js'), encoding='utf-8').read()
 try:
     with sync_playwright() as p:
-        b = p.chromium.launch(args=['--no-sandbox'])
+        chrome = '/usr/bin/google-chrome' if os.path.exists('/usr/bin/google-chrome') else None
+        b = p.chromium.launch(executable_path=chrome, args=['--no-sandbox'])
         ctx = b.new_context(service_workers='block', viewport={'width': 1366, 'height': 900})
         pg = ctx.new_page(); errs = []
         pg.on('pageerror', lambda e: errs.append(str(e)))

@@ -987,7 +987,8 @@ body.onboarding #app { visibility: hidden; }
   body.sb-collapsed .sb-profile { justify-content: center; padding: 6px 0; }
 }
 /* Phones: the greeting gets the space (profile lives in More and Settings) and may wrap. */
-.topbar h1.greet { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.topbar h1.greet { white-space: normal; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow-wrap: break-word; }
+@media (max-width: 399px) { .topbar h1.greet { font-size: 20px; } }
 @media (max-width: 639px) { .tb-profile { display: none; } }
 .menu-item.menu-profile { border-bottom: 1px solid var(--border); border-radius: 12px 12px 0 0; margin-bottom: 4px; }
 .menu-item.menu-profile .avatar { width: 30px; height: 30px; font-size: 12px; }

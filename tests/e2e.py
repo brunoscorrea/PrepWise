@@ -258,3 +258,4 @@ try:
 finally:
     srv.terminate()
 print('\nSUMMARY', sum(1 for r in results if r[1]), '/', len(results))
+import sys as _sys; _sys.exit(0 if results and all(r[1] for r in results) else 1)

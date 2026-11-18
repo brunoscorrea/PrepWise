@@ -39,7 +39,9 @@ async function launch() {
   const exe = findBrowser();
   if (!exe) throw new Error('No Chrome/Edge found. Set BROWSER=/path/to/browser.');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'prepwise-profiles-'));
-  const proc = spawn(exe, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${dir}`, '--no-first-run', '--no-default-browser-check',
+  // CI runners (Ubuntu 23.10+) block the Chrome sandbox's user namespaces.
+  const ci = process.env.CI ? ['--no-sandbox'] : [];
+  const proc = spawn(exe, [...ci, '--headless=new', '--remote-debugging-port=0', `--user-data-dir=${dir}`, '--no-first-run', '--no-default-browser-check',
     '--disable-extensions', '--disable-sync', '--disable-features=Translate,msEdgeSidebarV2', 'about:blank'], { stdio: 'ignore' });
   const portFile = path.join(dir, 'DevToolsActivePort');
   for (let i = 0; i < 200 && !fs.existsSync(portFile); i++) await sleep(50);
