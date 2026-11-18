@@ -1,0 +1,67 @@
+{
+  "format": "prepwise.certification",
+  "schemaVersion": 1,
+  "certification": {
+    "id": "example-cert",
+    "code": "EX-100",
+    "name": "Example Certification (template — replace every value)",
+    "provider": "Other",
+    "description": "Replace with a short description of what the exam covers.",
+    "website": "https://example.com/certification",
+    "studyGuideUrl": "https://example.com/study-guide",
+    "contentVersion": "1.0.0",
+    "exam": {
+      "masteryTarget": 85,
+      "minCoverage": 0.6,
+      "passingScore": null,
+      "domains": [
+        { "id": "1", "short": "Domain one", "title": "Replace with the first official domain title", "weight": [40, 50] },
+        { "id": "2", "short": "Domain two", "title": "Replace with the second official domain title", "weight": [50, 60] }
+      ],
+      "sections": { "1.1": "Replace with an official sub-section" },
+      "objectives": { "1.1.1": "Replace with an official objective" },
+      "refs": { "guide": ["https://example.com/study-guide", "Official study guide"] },
+      "weekSections": { "1": ["1.1"] },
+      "modes": { "mock": { "count": 40, "minutes": 90 }, "final": { "count": 50, "minutes": 110 } },
+      "disclaimer": "Practice questions written for learning. They are not official exam questions."
+    },
+    "plan": {
+      "dailyTargets": [60, 60, 60, 60, 60, 0, 0],
+      "studyDays": [true, true, true, true, true, false, false],
+      "weeks": [
+        {
+          "title": "Week 1 theme",
+          "objectives": ["Replace with a weekly goal"],
+          "sessions": [
+            { "day": 0, "topic": "First study topic", "kind": "study", "plannedMin": 60 },
+            { "day": 4, "topic": "Revision quiz", "kind": "assessment", "plannedMin": 60 }
+          ]
+        }
+      ]
+    },
+    "resources": [
+      { "id": "guide", "title": "Official study guide", "url": "https://example.com/study-guide", "type": "study-guide", "notes": "" }
+    ]
+  },
+  "questions": [
+    {
+      "id": "EX-001", "domain": "1", "obj": "1.1.1", "topic": "Example topic", "diff": "easy", "type": "single", "scenario": false,
+      "q": "Template question — replace or delete before sharing.",
+      "opts": ["Correct answer", "Distractor", "Distractor", "Distractor"],
+      "ans": [0],
+      "exp": "Explain why the correct answer is right.",
+      "why": ["", "Why this is wrong", "Why this is wrong", "Why this is wrong"],
+      "ref": "guide"
+    },
+    {
+      "id": "EX-002", "domain": "2", "topic": "Example topic", "diff": "intermediate", "type": "order",
+      "q": "Put these steps in order (template).", "opts": ["First", "Second", "Third"],
+      "exp": "List ordering options in the correct order. The app shuffles them."
+    },
+    {
+      "id": "EX-003", "domain": "2", "topic": "Example topic", "diff": "advanced", "type": "match",
+      "q": "Match each item to its description (template).", "pairs": [["Left A", "Right A"], ["Left B", "Right B"]],
+      "exp": "Pairs are listed correctly matched. The app shuffles the right-hand side."
+    }
+  ]
+}
