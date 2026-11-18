@@ -364,7 +364,9 @@
       }
       if (!errors.length) {
         res.data = { store: st, banks: isObj(obj.banks) ? obj.banks : {} };
-        res.summary = { certifications: Object.keys(st.certs).length };
+        const name = isObj(obj.profile) && isStr(obj.profile.name) ? obj.profile.name : (isObj(st.settings) && isStr(st.settings.name) ? st.settings.name : '');
+        const attempts = Object.values(st.progress).reduce((a, p) => a + (isObj(p) && isObj(p.quiz) && Array.isArray(p.quiz.attempts) ? p.quiz.attempts.length : 0), 0);
+        res.summary = { certifications: Object.keys(st.certs).length, profileName: name.replace(/\s+/g, ' ').trim().slice(0, 40), attempts, exportedAt: isStr(obj.exportedAt) ? obj.exportedAt : null };
       }
     }
     res.errors = cap(errors); res.warnings = cap(warnings);
@@ -409,8 +411,11 @@
   function progressFile(certId, progress) {
     return { format: FORMATS.progress, schemaVersion: FILE_VERSION, exportedAt: stamp(), generator: 'PrepWise', certificationId: certId, progress };
   }
-  function backupFile(store, banks) {
-    return { format: FORMATS.backup, schemaVersion: STORE_VERSION, exportedAt: stamp(), generator: 'PrepWise', store, banks };
+  // A backup is one local profile: its store, its own question banks and (since v2.2) its name.
+  function backupFile(store, banks, profile = null) {
+    const out = { format: FORMATS.backup, schemaVersion: STORE_VERSION, exportedAt: stamp(), generator: 'PrepWise', store, banks };
+    if (profile && isStr(profile.name) && profile.name.trim()) out.profile = { name: profile.name.trim().slice(0, 40) };
+    return out;
   }
   // Drop runtime-only fields so exports contain authored content only.
   function stripQuestion(q) {

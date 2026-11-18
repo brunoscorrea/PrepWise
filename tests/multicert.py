@@ -12,6 +12,8 @@ try:
         pg = ctx.new_page(); errs = []
         pg.on('pageerror', lambda e: errs.append(str(e)))
         pg.goto(f'http://localhost:{PORT}/index.html'); pg.evaluate("sessionStorage.removeItem('__mc')")
+        # A ready-made local profile skips the first-run welcome screen.
+        pg.evaluate("localStorage.setItem('prepwise:profiles', JSON.stringify({schema:1, active:'ptestprofile1', profiles:[{id:'ptestprofile1', name:'Tester', ns:'p'}]}))"); pg.reload()
         for _ in range(8):
             pg.wait_for_function('window.PrepWise && window.PrepWise.store'); pg.wait_for_timeout(500)
             r = pg.evaluate("async (s) => { eval(s); return await __mc.run(); }", SRC)

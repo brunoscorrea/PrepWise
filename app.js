@@ -4,26 +4,32 @@
    certification-scoped views (Home, Study Plan, Analytics, Settings).
    Vanilla JS, no dependencies. All data lives on this device (localStorage).
 
-   Store layout (localStorage):
-     prepwise:v2              the application store (settings, certifications, progress)
-     prepwise:bank:<certId>   question bank of a user-created/imported certification
-     prepwise:backup:v1       untouched copy of the v1 "M365 Study Tracker" data, made before migration
-     prepwise:snapshots       last few automatic snapshots taken before destructive changes
-     m365-study-tracker:v1    the original v1 data (never modified or deleted)
+   Store layout (localStorage) — one namespace per local profile, see js/profiles.js:
+     prepwise:profiles                 list of local profiles and which one is active
+     <profile>store                    the profile's store (settings, certifications, progress)
+     <profile>bank:<certId>            question bank of a user-created/imported certification
+     <profile>snapshots                last few automatic snapshots taken before destructive changes
+   The profile that used PrepWise before profiles existed keeps its original keys
+   (prepwise:v2, prepwise:bank:*, prepwise:snapshots, prepwise:backup:v1 and the
+   untouched v1 data in m365-study-tracker:v1).
    ========================================================= */
 'use strict';
 
 (() => {
   const S = window.PrepWiseSchema;
+  const P = window.PrepWiseProfiles;
   // ---------------------------------------------------------------
   // Constants
   // ---------------------------------------------------------------
-  const STORE_KEY = 'prepwise:v2';
-  const LEGACY_KEY = 'm365-study-tracker:v1';
-  const BACKUP_V1_KEY = 'prepwise:backup:v1';
-  const BANK_PREFIX = 'prepwise:bank:';
-  const SNAP_KEY = 'prepwise:snapshots';
-  const APP_VERSION = '2.1.0';
+  // Storage keys of the active profile (set in boot() before anything is read).
+  let profile = null;            // { id, name, ns, ... } from the registry
+  let registry = null;
+  let K = P.keys({ id: 'pboot0000', ns: 'p' });
+  let STORE_KEY = K.store;
+  let BANK_PREFIX = K.bankPrefix;
+  let SNAP_KEY = K.snaps;
+  let suspended = false;         // true while switching/deleting profiles: nothing is written
+  const APP_VERSION = '2.2.0';
   const APP_NAME = 'PrepWise';
   const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -91,6 +97,7 @@
   // Icons (inline SVG, 24px grid, 1.8 stroke)
   // ---------------------------------------------------------------
   const ICONS = {
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/>',
     home: '<path d="M3.5 10.5L12 3.5l8.5 7"/><path d="M5.5 9v10.5a1 1 0 0 0 1 1H10v-6h4v6h3.5a1 1 0 0 0 1-1V9"/>',
     dashboard: '<rect x="3" y="3" width="7.5" height="9" rx="2"/><rect x="13.5" y="3" width="7.5" height="5.5" rx="2"/><rect x="13.5" y="11.5" width="7.5" height="9.5" rx="2"/><rect x="3" y="15" width="7.5" height="6" rx="2"/>',
     plan: '<rect x="3" y="4.5" width="18" height="16.5" rx="3"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4M7.5 13.5h3M13.5 13.5h3M7.5 17h3"/>',
@@ -348,7 +355,7 @@
     st.settings.installDismissed = !!(v1.ui && v1.ui.installDismissed);
     st.settings.defaultCert = 'ab-650';
     st.activeCert = 'ab-650';
-    st.migratedFrom = { key: LEGACY_KEY, at: new Date().toISOString(), backupKey: BACKUP_V1_KEY };
+    st.migratedFrom = { key: P.LEGACY.v1, at: new Date().toISOString(), backupKey: P.LEGACY.v1Backup };
     return st;
   }
 
@@ -377,17 +384,19 @@
         store = normaliseStore(JSON.parse(raw));
       } catch (e) {
         console.warn('Saved data could not be read; keeping a copy and starting fresh', e);
-        try { localStorage.setItem(`prepwise:corrupt:${Date.now()}`, raw); } catch (_) { /* ignore */ }
+        try { localStorage.setItem(`${K.corruptPrefix}${Date.now()}`, raw); } catch (_) { /* ignore */ }
         store = freshStore();
         setTimeout(() => toast('Saved data could not be read. A copy was kept, and the app started fresh.', { icon: 'x', ms: 6000 }), 600);
       }
     } else {
+      // Only the profile that adopted the pre-profile data may migrate the v1 tracker:
+      // a new profile must never inherit someone else's progress.
       let legacy = null;
-      try { legacy = localStorage.getItem(LEGACY_KEY); } catch (e) { /* ignore */ }
+      if (K.v1) { try { legacy = localStorage.getItem(K.v1); } catch (e) { /* ignore */ } }
       if (legacy) {
         try {
           // Back up the original data before anything else (never overwritten once made).
-          if (!localStorage.getItem(BACKUP_V1_KEY)) localStorage.setItem(BACKUP_V1_KEY, legacy);
+          if (!localStorage.getItem(K.v1Backup)) localStorage.setItem(K.v1Backup, legacy);
           store = migrateLegacy(JSON.parse(legacy));
           migratedNow = true;
         } catch (e) {
@@ -397,6 +406,11 @@
       } else store = freshStore();
     }
     ensureBuiltins();
+    // The registry holds the profile's display name; the store mirrors it for the greeting.
+    if (profile) {
+      if (profile.name) store.settings.name = profile.name;
+      else if (store.settings.name) { profile.name = P.cleanName(store.settings.name); try { P.rename(localStorage, registry, profile.id, profile.name); } catch (e) { /* ignore */ } }
+    }
     // Make sure every certification has progress, and pick the starting certification.
     Object.keys(store.certs).forEach((id) => { store.progress[id] = normaliseProgress(store.progress[id], resolveCert(id)); });
     Object.keys(store.progress).forEach((id) => { if (!store.certs[id]) delete store.progress[id]; });
@@ -426,7 +440,9 @@
   let saveTimer = null;
   function save(immediate = false) {
     clearTimeout(saveTimer);
+    if (suspended || !store) return;
     const write = () => {
+      if (suspended) return;
       try {
         localStorage.setItem(STORE_KEY, JSON.stringify(store));
         storageOk = true;
@@ -961,23 +977,31 @@
   }
 
   function renderShell() {
+    if (!store) return; // still on the welcome screen
     // Active certification is shown in the sidebar and the top bar on every page.
     const chip = cert
       ? `<span class="cert-badge">${esc(cert.code)}</span><span class="cert-chip-text"><span class="cc-name">${esc(cert.name)}</span><span class="cc-prov">${esc(cert.provider)}</span></span>${icon('chevronDown', 'cc-chev')}`
       : `<span class="cert-badge muted">—</span><span class="cert-chip-text"><span class="cc-name">No certification selected</span><span class="cc-prov">Choose or create one</span></span>${icon('chevronDown', 'cc-chev')}`;
     $('#sb-cert').innerHTML = chip;
     $('#tb-cert').innerHTML = chip;
+    const pn = (profile && profile.name) || 'Profile';
+    const sbp = $('#sb-profile');
+    if (sbp) { sbp.innerHTML = `${avatar(pn)}<span class="sbp-text"><span class="sbp-name">${esc(pn)}</span><span class="sbp-sub">${registry && registry.profiles.length > 1 ? 'Switch profile' : 'Local profile'}</span></span>`; sbp.setAttribute('aria-label', `Profile: ${pn}`); }
+    const tbp = $('#tb-profile');
+    if (tbp) { tbp.innerHTML = avatar(pn, 'sm'); tbp.setAttribute('aria-label', `Profile: ${pn}`); }
     $('#sb-status').innerHTML = `${navigator.onLine ? '' : `<span class="chip amber">${icon('wifiOff')}Offline</span>`}<span>v${APP_VERSION}</span>`;
     document.documentElement.dataset.theme = store.settings.theme;
     document.body.classList.toggle('sb-collapsed', !!store.settings.sidebarCollapsed);
   }
 
   function renderCurrent() {
+    if (!store) return;
     renderShell();
     const o = overall();
     const v = VIEWS[currentView];
     const tb = $('#topbar-title'), eb = $('#topbar-eyebrow');
     tb.textContent = currentView === 'home' ? greeting() : v.label;
+    tb.classList.toggle('greet', currentView === 'home');
     eb.textContent = v.eyebrow ? v.eyebrow(o) : (o && v.scope === 'cert')
       ? (o.phase === 'during' ? `Week ${o.currentWeek} of ${o.W} · Day ${o.dayNo} of ${o.totalDays}` : o.phase === 'before' ? `Starts ${fmtDate(o.start)}` : 'Target period ended')
       : APP_NAME;
@@ -1660,7 +1684,6 @@
     const certs = listCerts();
     const general = `
       <div class="form-grid">
-        <label class="field"><span class="label">Your name</span><input class="input" value="${esc(ap.name)}" data-bind="app:name" maxlength="40" placeholder="Used in the greeting"></label>
         <label class="field"><span class="label">Theme</span><select class="select" data-bind="app:theme">${Object.entries(THEMES).map(([k, v]) => `<option value="${k}" ${ap.theme === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
         <label class="field"><span class="label">Default landing page</span><select class="select" data-bind="app:landing">${[['home', 'Home'], ['plan', 'Study Plan'], ['quiz', 'Quiz Centre'], ['analytics', 'Progress & Analytics'], ['certs', 'My Certifications']].filter(([k]) => VIEWS[k] && VIEWS[k].render).map(([k, v]) => `<option value="${k}" ${ap.landing === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
         <label class="field"><span class="label">Language &amp; date format</span><select class="select" data-bind="app:locale">${Object.entries(LOCALES).map(([k, v]) => `<option value="${k}" ${ap.locale === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
@@ -1721,8 +1744,8 @@
     const data = `
       <div class="data-grid">
         <div class="data-card">
-          <h4>${icon('shield')} Application backup</h4>
-          <p>Everything on this device: all certifications, question banks, progress and settings.</p>
+          <h4>${icon('shield')} Profile backup</h4>
+          <p>Everything in ${esc(profileLabel())}'s profile: certifications, question banks, progress, notes and settings. Other profiles aren't included.</p>
           <div class="btn-row"><button class="btn" data-action="export-all">${icon('download')} Export backup</button><button class="btn" data-action="import-any">${icon('upload')} Import file</button></div>
         </div>
         <div class="data-card">
@@ -1735,16 +1758,16 @@
       <div class="group-label">Reset</div>
       <div class="btn-row">
         ${state ? `<button class="btn btn-danger" data-action="reset-progress">${icon('refresh')} Reset ${esc(cert.code)} progress</button>` : ''}
-        <button class="btn btn-danger" data-action="reset-all">${icon('trash')} Reset application</button>
       </div>
-      <div class="tiny muted" style="margin-top:10px">Resetting a certification clears only that certification's progress. Its study plan, questions and every other certification stay as they are.</div>
+      <div class="tiny muted" style="margin-top:10px">Resetting a certification clears only that certification's progress. Its study plan, questions and every other certification stay as they are. To clear everything in your profile, use <a href="#set-profile" data-action="scroll-to" data-target="set-profile">Profile → Reset my profile</a>.</div>
       ${restoreRow()}
-      <div class="tiny muted" style="margin-top:14px">${storageOk ? 'Data saves automatically on this device only.' : 'Storage is unavailable — changes may not be saved.'} Export a backup now and then: clearing site data in your browser erases it.</div>`;
+      <div class="tiny muted" style="margin-top:14px">${storageOk ? 'Data saves automatically in this browser only.' : 'Storage is unavailable — changes may not be saved.'} Export a backup now and then: clearing site data in your browser erases it.</div>`;
 
     el.innerHTML = `
       <nav class="settings-nav" aria-label="Settings sections">
-        ${[['general', 'General'], ['schedule', 'Study Schedule'], ['prefs', 'Certification Preferences'], ['data', 'Data Management']].map(([k, l]) => `<a href="#set-${k}" data-action="scroll-to" data-target="set-${k}">${l}</a>`).join('')}
+        ${[['profile', 'Profile'], ['general', 'General'], ['schedule', 'Study Schedule'], ['prefs', 'Certification Preferences'], ['data', 'Data Management']].map(([k, l]) => `<a href="#set-${k}" data-action="scroll-to" data-target="set-${k}">${l}</a>`).join('')}
       </nav>
+      ${settingsSection('profile', 'Profile', 'user', 'Your name, local profiles and privacy.', profileSettings())}
       ${settingsSection('general', 'General', 'settings', 'Appearance and how the app starts.', general)}
       ${settingsSection('schedule', 'Study Schedule', 'calendar', state ? `Dates and daily study time for ${esc(cert.code)}.` : '', schedule)}
       ${settingsSection('prefs', 'Certification Preferences', 'cert', 'Which certification opens and how preparation is scored.', prefs)}
@@ -1752,10 +1775,96 @@
       <div class="tiny muted about">${APP_NAME} v${APP_VERSION} · ${navigator.onLine ? 'Online' : 'Offline'} · Data schema v${S.STORE_VERSION}</div>`;
   }
 
+  // ---------------------------------------------------------------
+  // Local profiles (UI). Storage lives in js/profiles.js.
+  // ---------------------------------------------------------------
+  const profileLabel = () => (profile && profile.name) || 'This';
+  const avatar = (name, cls = '') => `<span class="avatar ${cls}" aria-hidden="true">${esc(P.initials(name))}</span>`;
+  const PRIVACY_TEXT = 'Your study progress and personal notes are stored locally in this browser. They are not automatically shared with other PrepWise users. Use Export Backup to transfer your progress to another device.';
+
+  function profileSettings() {
+    const others = registry ? registry.profiles.filter((p) => p.id !== profile.id).sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt)) : [];
+    const since = profile && profile.createdAt ? new Date(profile.createdAt).toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+    return `
+      <div class="profile-current">
+        ${avatar(profile && profile.name, 'lg')}
+        <div class="pc-text"><strong id="profile-name-out">${esc((profile && profile.name) || 'Unnamed profile')}</strong>
+          <span class="tiny muted">Local profile${since ? ` · created ${esc(since)}` : ''}${registry && registry.profiles.length > 1 ? ` · ${plural(registry.profiles.length, 'profile')} in this browser` : ''}</span></div>
+      </div>
+      <div class="form-grid">
+        <label class="field"><span class="label">Display name</span><input class="input" id="profile-name" value="${esc(profile ? profile.name : '')}" data-bind="app:name" maxlength="${P.NAME_MAX}" autocomplete="given-name" placeholder="Your name">
+          <span class="hint">Shown in the greeting. It stays in this browser.</span></label>
+      </div>
+      ${others.length ? `<div class="group-label">Other profiles in this browser</div>
+      <div class="profile-list">${others.map((p) => `<div class="row-card profile-row">${avatar(p.name)}<div class="pr-text"><strong>${esc(p.name || 'Unnamed profile')}</strong><span class="tiny muted">Last used ${esc(new Date(p.lastUsedAt).toLocaleDateString(locale(), { day: 'numeric', month: 'short' }))}</span></div>
+        <button class="btn btn-sm" data-action="profile-switch" data-id="${esc(p.id)}">${icon('switch')} Switch</button></div>`).join('')}</div>` : ''}
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn" data-action="profile-new">${icon('plus')} New profile</button>
+        <button class="btn" data-action="export-all">${icon('download')} Export profile</button>
+        <button class="btn" data-action="import-any">${icon('upload')} Import profile</button>
+      </div>
+      <div class="privacy-note">${icon('shield')}<div>
+        <p><strong>${esc(PRIVACY_TEXT)}</strong></p>
+        <p>Each browser and device keeps its own separate data, so friends who open PrepWise on their own devices never see yours. Profiles in the same browser are a convenience, not a lock: anyone using this browser profile can open every PrepWise profile in it. On iPhone and iPad, the Home Screen app keeps data separately from Safari.</p>
+        <p>PrepWise has no accounts, analytics or tracking, and never sends your study data anywhere.</p>
+      </div></div>
+      <div class="group-label">Profile reset and removal</div>
+      <div class="btn-row">
+        <button class="btn btn-danger" data-action="reset-all">${icon('refresh')} Reset my profile</button>
+        <button class="btn btn-ghost btn-danger-text" data-action="profile-delete">${icon('trash')} Delete this profile</button>
+      </div>`;
+  }
+
+  // Name prompt for a new profile. Resolves to the cleaned name or null.
+  function namePrompt({ title, intro, ok }) {
+    const p = confirmDialog({ title, ok, html: `${intro ? `<p class="small muted">${esc(intro)}</p>` : ''}<label class="field"><span class="label">Name</span><input class="input" id="dlg-name" maxlength="${P.NAME_MAX}" autocomplete="off" placeholder="e.g. Alex"></label>` });
+    // The dialog is in the DOM as soon as confirmDialog returns.
+    const inp = document.getElementById('dlg-name');
+    const btn = document.querySelector('#dialog-root [data-d="1"]');
+    btn.disabled = true;
+    inp.addEventListener('input', () => { btn.disabled = !P.cleanName(inp.value); });
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !btn.disabled) btn.click(); });
+    setTimeout(() => inp.focus(), 30);
+    return p.then((yes) => (yes && P.cleanName(inp.value) ? P.cleanName(inp.value) : null));
+  }
+
+  // Leave this page without writing anything else, then load the active profile.
+  function reloadIntoProfile() {
+    suspended = true;
+    clearTimeout(saveTimer);
+    history.replaceState(null, '', location.pathname + location.search);
+    location.reload();
+  }
+
+  function switchProfile(id) {
+    if (!registry || !P.find(registry, id) || (profile && id === profile.id)) return;
+    if (state && state.timer && state.timer.running) timerPause();
+    save(true);
+    P.setActive(localStorage, registry, id);
+    reloadIntoProfile();
+  }
+
+  // Create a profile with the given data (backup import) or empty, and open it.
+  function createProfile(name, data = null) {
+    if (state && state.timer && state.timer.running) timerPause();
+    save(true);
+    const p = P.create(localStorage, registry, name, { activate: false });
+    if (data) {
+      try { P.writeData(localStorage, p, data.store, data.banks); } catch (e) {
+        P.remove(localStorage, registry, p.id);
+        toast('Not enough storage space to create the profile.', { icon: 'x' });
+        return null;
+      }
+    }
+    P.setActive(localStorage, registry, p.id);
+    reloadIntoProfile();
+    return p;
+  }
+
   function restoreRow() {
     const missing = [...BUILTINS.keys()].filter((id) => !store.certs[id]);
     const snaps = listSnapshots();
-    const hasV1 = (() => { try { return !!localStorage.getItem(BACKUP_V1_KEY); } catch (e) { return false; } })();
+    const hasV1 = (() => { try { return !!(K.v1Backup && localStorage.getItem(K.v1Backup)); } catch (e) { return false; } })();
     if (!missing.length && !snaps.length && !hasV1) return '';
     return `<div class="group-label">Restore</div><div class="btn-row">
       ${missing.map((id) => `<button class="btn" data-action="restore-builtin" data-id="${id}">${icon('refresh')} Restore built-in ${esc(BUILTINS.get(id).cert.code)}</button>`).join('')}
@@ -1810,7 +1919,18 @@
     const v = el.type === 'checkbox' ? el.checked : el.value;
     if (scope === 'app') {
       const ap = store.settings;
-      if (a === 'name') { ap.name = String(v).slice(0, 40); save(); return; }
+      if (a === 'name') {
+        const n = P.cleanName(v);
+        if (!n) { if (committed) { el.value = ap.name; toast('Your profile needs a name.', { icon: 'info' }); } return; }
+        ap.name = n;
+        if (profile && registry) { profile.name = n; try { P.rename(localStorage, registry, profile.id, n); } catch (e) { /* ignore */ } }
+        const out = $('#profile-name-out'); if (out) out.textContent = n;
+        const av = $('#set-profile .avatar.lg'); if (av) av.textContent = P.initials(n);
+        renderShell();
+        save();
+        if (committed) toast('Name saved', { ms: 1200 });
+        return;
+      }
       if (!committed) return;
       if (a === 'theme' && THEMES[v]) ap.theme = v;
       else if (a === 'landing') ap.landing = v;
@@ -1958,6 +2078,7 @@
       <div class="sheet-title"><div><div class="eyebrow">${APP_NAME}</div><h2>More</h2></div>
         <button class="icon-btn" data-action="close-sheet" aria-label="Close">${icon('x')}</button></div>
       <div class="menu-list">
+        <button class="menu-item menu-profile" data-action="profile-menu">${avatar(profile && profile.name)}<span class="mp-text"><span>${esc((profile && profile.name) || 'Profile')}</span><span>${registry && registry.profiles.length > 1 ? 'Switch or manage profiles' : 'Your local profile'}</span></span>${icon('chevron', 'muted')}</button>
         ${items.map(([id, v]) => `<button class="menu-item ${currentView === id ? 'active' : ''}" data-nav="${id}">${icon(v.icon)}<span>${esc(v.label)}</span>${icon('chevron', 'muted')}</button>`).join('')}
       </div>`);
   }
@@ -2129,10 +2250,31 @@
       save(true); renderCurrent();
       toast(`${c.code} progress reset`, { icon: 'refresh' });
     },
-    'reset-all': async () => {
-      const ok = await confirmDialog({ title: 'Reset the whole application?', body: 'Every certification, question bank, note and all progress on this device will be deleted, and the built-in profiles restored. A snapshot is kept, but export a backup first if unsure.', ok: 'Reset everything', danger: true, requireText: 'RESET' });
+    'profile-switch': (el) => switchProfile(el.dataset.id),
+    'profile-new': async () => {
+      if (!registry) return toast('Profiles need browser storage, which is unavailable here.', { icon: 'x' });
+      const name = await namePrompt({ title: 'Create a new profile', intro: 'A new profile starts with no progress, notes or quiz history. Your current profile stays exactly as it is, and you can switch back at any time.', ok: 'Create profile' });
+      if (name) createProfile(name);
+    },
+    'profile-delete': async () => {
+      if (!registry) return;
+      const others = registry.profiles.filter((p) => p.id !== profile.id);
+      const ok = await confirmDialog({
+        title: `Delete ${profile.name || 'this'} profile?`, ok: 'Delete profile', danger: true, requireText: 'DELETE',
+        body: `All progress, notes, bookmarks, quiz history and settings in this profile are permanently removed from this browser. This can't be undone, so export a backup first if you might need it. ${others.length ? 'Other profiles are not affected.' : 'You can then create a new profile.'}`,
+      });
       if (!ok) return;
-      snapshot('Reset application');
+      if (state && state.timer && state.timer.running) timerPause();
+      suspended = true;
+      clearTimeout(saveTimer);
+      P.remove(localStorage, registry, profile.id);
+      reloadIntoProfile();
+    },
+    'profile-menu': () => profileSheet(),
+    'reset-all': async () => {
+      const ok = await confirmDialog({ title: `Reset ${profile && profile.name ? `${profile.name}'s` : 'this'} profile?`, body: 'Every certification, question bank, note and all progress in this profile will be deleted, and the built-in certifications restored. Your name stays, and other profiles are not affected. A snapshot is kept, but export a backup first if unsure.', ok: 'Reset profile', danger: true, requireText: 'RESET' });
+      if (!ok) return;
+      snapshot('Reset profile');
       Object.keys(store.certs).forEach(removeBank);
       const keep = { name: store.settings.name, installDismissed: store.settings.installDismissed };
       store = freshStore();
@@ -2144,7 +2286,7 @@
       hooks.certChange.forEach((fn) => fn(cert, state));
       save(true);
       navigate('home');
-      toast('Application reset', { icon: 'refresh' });
+      toast('Profile reset', { icon: 'refresh' });
     },
     'restore-builtin': (el) => {
       const id = el.dataset.id;
@@ -2156,7 +2298,7 @@
       switchCert(id, { toast: false, view: 'home' });
     },
     'export-v1': () => {
-      try { const raw = localStorage.getItem(BACKUP_V1_KEY); if (raw) download(`study-tracker-v1-original-${todayISO()}.json`, { app: 'm365-study-tracker', exportedAt: new Date().toISOString(), data: JSON.parse(raw) }); } catch (e) { toast('Could not read the v1 backup.', { icon: 'x' }); }
+      try { const raw = K.v1Backup && localStorage.getItem(K.v1Backup); if (raw) download(`study-tracker-v1-original-${todayISO()}.json`, { app: 'm365-study-tracker', exportedAt: new Date().toISOString(), data: JSON.parse(raw) }); } catch (e) { toast('Could not read the v1 backup.', { icon: 'x' }); }
     },
     snapshots: () => {
       const list = listSnapshots();
@@ -2185,7 +2327,10 @@
       Object.entries(banks).forEach(([id, list]) => { try { localStorage.setItem(BANK_PREFIX + id, JSON.stringify(list)); } catch (e) { toast(`Could not store the ${id} question bank.`, { icon: 'x' }); } });
     }
     bankCache.clear();
+    const keepName = store && store.settings ? store.settings.name : '';
     store = normaliseStore(raw);
+    // Restoring data into this profile never renames it.
+    if (profile && profile.name) store.settings.name = profile.name; else if (keepName) store.settings.name = keepName;
     ensureBuiltins();
     Object.keys(store.certs).forEach((id) => { store.progress[id] = normaliseProgress(store.progress[id], store.certs[id]); });
     activate(store.certs[store.activeCert] ? store.activeCert : firstCertId());
@@ -2224,6 +2369,16 @@
   window.addEventListener('offline', () => renderShell());
   // Data changed in another tab
   window.addEventListener('storage', (e) => {
+    if (suspended || !profile) return;
+    if (e.key === P.REG_KEY) {
+      // Another tab switched, renamed or deleted profiles.
+      const next = P.readRegistry(localStorage);
+      if (!next || !P.find(next, profile.id)) { suspended = true; location.reload(); return; } // deleted: write nothing
+      if (next.active !== profile.id) { save(true); suspended = true; location.reload(); return; }
+      registry = next; profile = P.find(next, profile.id);
+      if (profile.name && store.settings.name !== profile.name) { store.settings.name = profile.name; if (!sheetOpen) renderCurrent(); }
+      return;
+    }
     if (e.key === STORE_KEY && e.newValue) {
       try {
         store = normaliseStore(JSON.parse(e.newValue)); bankCache.clear(); ensureBuiltins();
@@ -2253,8 +2408,11 @@
           w && w.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) prompt(w); });
         });
       }).catch((err) => console.warn('SW registration failed', err));
+      // Reload only when an update replaces a previous worker. On a first visit the new
+      // worker just takes control: reloading then would wipe the welcome screen mid-typing.
+      const hadController = !!navigator.serviceWorker.controller;
       let reloading = false;
-      navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloading) { reloading = true; save(true); location.reload(); } });
+      navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController && !reloading && !suspended) { reloading = true; save(true); location.reload(); } });
     });
   }
 
@@ -2267,7 +2425,12 @@
     get store() { return store; },
     get cert() { return cert; },
     get currentView() { return currentView; },
-    APP_NAME, APP_VERSION, STORE_KEY, BANK_PREFIX, BUILTINS, DAY_NAMES, KINDS,
+    get STORE_KEY() { return STORE_KEY; },
+    get BANK_PREFIX() { return BANK_PREFIX; },
+    get profile() { return profile ? { ...profile } : null; },
+    get profiles() { return registry ? registry.profiles.map((p) => ({ ...p })) : []; },
+    createProfile, switchProfile,
+    APP_NAME, APP_VERSION, BUILTINS, DAY_NAMES, KINDS,
     save, overall, renderCurrent, renderShell, navigate, toast, confirmDialog, celebrate, openSheet, closeSheet, download, pickFile,
     icon, esc, bar, ring, kpi, numField, emptyState, plural, fmtDate, fmtMin, fmtClock, fmtHours, relDay, todayISO, toISO, parseISO, addDays, daysBetween, clamp, num, uid, clone,
     logActivity, afterChange, checkAchievements, snapshot, replaceStore,
@@ -2282,7 +2445,90 @@
   window.PrepWise = API;
   window.StudyApp = API; // v1 name, kept for compatibility
 
-  function boot() {
+  // ---------------------------------------------------------------
+  // Profile selection and first-run onboarding
+  // ---------------------------------------------------------------
+  function useProfile(p) {
+    profile = p;
+    K = P.keys(p);
+    STORE_KEY = K.store; BANK_PREFIX = K.bankPrefix; SNAP_KEY = K.snaps;
+  }
+
+  // Full-screen welcome. Asks for the name only; everything else has sensible defaults.
+  function onboarding({ welcomeBack = false } = {}) {
+    return new Promise((resolve) => {
+      const root = document.createElement('div');
+      root.className = 'onboard-root';
+      root.id = 'onboard-root';
+      root.innerHTML = `<form class="onboard" novalidate aria-labelledby="ob-title">
+        <span class="logo ob-logo" aria-hidden="true">${$('.sb-brand .logo') ? $('.sb-brand .logo').innerHTML.replace(/id="lg"/g, 'id="ob-lg"').replace(/url\(#lg\)/g, 'url(#ob-lg)') : ''}</span>
+        <h1 id="ob-title">${welcomeBack ? 'Welcome back to PrepWise' : 'Welcome to PrepWise'}</h1>
+        <p class="ob-sub">${welcomeBack ? 'PrepWise now supports separate profiles, so friends can share a device without sharing progress. Your study data is safe and unchanged.' : 'Plan your study, practise with exam-style questions and track your readiness for Microsoft certifications.'}</p>
+        <label class="field"><span class="label">What should we call you?</span>
+          <input class="input" id="ob-name" name="name" maxlength="${P.NAME_MAX}" autocomplete="given-name" placeholder="Your first name" required></label>
+        <button class="btn btn-primary btn-block" id="ob-go" type="submit" disabled>${welcomeBack ? 'Continue' : 'Start studying'}</button>
+        <p class="ob-privacy">${icon('shield')}<span>${esc(PRIVACY_TEXT)}</span></p>
+      </form>`;
+      document.body.appendChild(root);
+      document.body.classList.add('onboarding');
+      const inp = $('#ob-name', root), go = $('#ob-go', root);
+      inp.addEventListener('input', () => { go.disabled = !P.cleanName(inp.value); });
+      $('form', root).addEventListener('submit', (e) => {
+        e.preventDefault();
+        const n = P.cleanName(inp.value);
+        if (!n) return;
+        root.remove();
+        document.body.classList.remove('onboarding');
+        resolve(n);
+      });
+      setTimeout(() => inp.focus(), 50);
+    });
+  }
+
+  async function selectProfile() {
+    let res;
+    try { res = P.init(localStorage); } catch (e) {
+      // Storage blocked (some private modes): run with a temporary profile that isn't saved.
+      storageOk = false;
+      useProfile({ id: 'ptemporary0', name: '', ns: 'p', createdAt: new Date().toISOString(), lastUsedAt: new Date().toISOString() });
+      profile.name = await onboarding();
+      return { fresh: true };
+    }
+    registry = res.reg;
+    let p = P.active(registry);
+    if (!p) {
+      const name = await onboarding();
+      p = P.create(localStorage, registry, name);
+      useProfile(p);
+      return { fresh: true };
+    }
+    P.setActive(localStorage, registry, p.id);
+    useProfile(p);
+    if (!p.name) {
+      // Upgraded data without a name (or a rebuilt registry): ask once, keep everything.
+      let stored = '';
+      try { const s = JSON.parse(localStorage.getItem(K.store) || 'null'); stored = s && s.settings ? P.cleanName(s.settings.name) : ''; } catch (e) { /* ignore */ }
+      const name = stored || await onboarding({ welcomeBack: p.ns === 'legacy' });
+      P.rename(localStorage, registry, p.id, name);
+    }
+    return { fresh: false, migrated: res.migrated };
+  }
+
+  function profileSheet() {
+    const others = registry ? registry.profiles.filter((p) => p.id !== profile.id).sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt)) : [];
+    openSheet(`<div class="sheet-title"><div><div class="eyebrow">Local profile</div><h2>${esc(profile.name || 'Profile')}</h2></div>
+        <button class="icon-btn" data-action="close-sheet" aria-label="Close">${icon('x')}</button></div>
+      <div class="menu-list">
+        ${others.map((p) => `<button class="menu-item" data-action="profile-switch" data-id="${esc(p.id)}">${avatar(p.name)}<span>Switch to ${esc(p.name || 'Unnamed profile')}</span>${icon('chevron', 'muted')}</button>`).join('')}
+        <button class="menu-item" data-action="profile-new">${icon('plus')}<span>New profile</span>${icon('chevron', 'muted')}</button>
+        <button class="menu-item" data-action="goto" data-view="settings" data-anchor="set-profile">${icon('settings')}<span>Manage profile</span>${icon('chevron', 'muted')}</button>
+      </div>
+      <p class="tiny muted" style="margin:14px 2px 0">${esc(PRIVACY_TEXT)}</p>`);
+  }
+
+  async function boot() {
+    const sel = await selectProfile();
+    if (sel.migrated) setTimeout(() => toast(`Your existing progress is now ${profile.name ? `${profile.name}'s` : 'your'} profile. Nothing was changed.`, { icon: 'shield', ms: 6000 }), 700);
     load();
     buildNav();
     hooks.load.forEach((fn) => fn(state));
@@ -2294,6 +2540,7 @@
     navigate(VIEWS[initial] && VIEWS[initial].render ? initial : (store.settings.landing || 'home'), { scroll: false });
     if (state && state.timer && state.timer.running) ensureTick();
     hooks.ready.forEach((fn) => fn(state));
+    document.documentElement.dataset.ready = '1'; // app booted (used by tests)
     if (migratedNow) setTimeout(() => toast('Your AB-650 data was upgraded to PrepWise. A backup of the original is kept on this device.', { icon: 'shield', ms: 6000 }), 500);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
