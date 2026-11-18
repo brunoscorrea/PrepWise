@@ -27,7 +27,8 @@
   }
   const ids = (list) => list.map((q) => q.id);
   // Clear storage and stop the app's pagehide/visibility save from writing the old store back before the reload.
-  const wipe = () => { localStorage.clear(); const real = Storage.prototype.setItem; Storage.prototype.setItem = function (k, v) { if (this === window.localStorage) return; return real.call(this, k, v); }; };
+  // A ready-made local profile skips the first-run welcome screen.
+  const wipe = () => { localStorage.clear(); localStorage.setItem('prepwise:profiles', JSON.stringify({ schema: 1, active: 'ptestprofile1', profiles: [{ id: 'ptestprofile1', name: 'Tester', ns: 'p' }] })); const real = Storage.prototype.setItem; Storage.prototype.setItem = function (k, v) { if (this === window.localStorage) return; return real.call(this, k, v); }; };
 
   const stages = [
     // 0: start from an empty origin
@@ -148,6 +149,10 @@
       const dt = new DataTransfer();
       dt.items.add(new File([st.tmp.backup], 'prepwise-backup-test.json', { type: 'application/json' }));
       input.files = dt.files; input.dispatchEvent(new Event('change')); await wait(400);
+      // Since v2.2 a backup is imported as a new profile by default; restore into this one instead.
+      const replace = document.querySelector('#dialog-root [data-c="replace"]');
+      t('import: backup offers "new profile" and "replace this profile"', !!replace && !!document.querySelector('#dialog-root [data-c="new"]'));
+      if (replace) replace.click(); await wait(150);
       const req = document.getElementById('dlg-req');
       if (req) { req.value = 'RESTORE'; req.dispatchEvent(new Event('input', { bubbles: true })); }
       await wait(100);

@@ -25,8 +25,12 @@ def new_ctx(b, seed_legacy=False, vp=(1366,900), sw='block'):
     pg.on('dialog', lambda d: (pg.errs.append('native dialog '+d.message), d.dismiss()))
     return ctx, pg
 
-def boot(pg):
-    pg.goto(URL); pg.wait_for_function('window.PrepWise && window.PrepWise.store && document.querySelector("#topbar-title").textContent.length>0'); pg.wait_for_timeout(300)
+def boot(pg, name='Friend'):
+    pg.goto(URL)
+    # A fresh browser shows the first-run welcome screen (since v2.2): answer it.
+    pg.wait_for_function('document.getElementById("onboard-root") || (window.PrepWise && window.PrepWise.store)')
+    if pg.query_selector('#onboard-root'): pg.fill('#ob-name', name); pg.click('#ob-go')
+    pg.wait_for_function('window.PrepWise && window.PrepWise.store && document.querySelector("#topbar-title").textContent.length>0'); pg.wait_for_timeout(300)
 
 def J(pg, js): return pg.evaluate(js)
 
@@ -59,7 +63,7 @@ try:
     check('1 sessions preserved (ids, status, time, notes)', [ (s['id'],s['status'],s['actualSec'],s['notes']) for s in pr['sessions']] == [ (s['id'],s['status'],s['actualSec'],s['notes']) for s in L['sessions']])
     check('1 lectures preserved', pr['sessions'][2]['lectures']==L['sessions'][2]['lectures'])
     check('1 weeks/objectives preserved', [[o['id'],o['done']] for w in pr['weeks'] for o in w['objectives']]==[[o['id'],o['done']] for w in L['weeks'] for o in w['objectives']] and pr['weeks'][0]['assessmentScore']==78)
-    check('1 settings preserved', pr['settings']['startDate']=='2026-11-02' and pr['settings']['dailyTargets']==L['settings']['dailyTargets'] and pr['settings']['masteryTarget']==80 and st['settings']['name']=='Bruno')
+    check('1 settings preserved', pr['settings']['startDate']=='2026-11-02' and pr['settings']['dailyTargets']==L['settings']['dailyTargets'] and pr['settings']['masteryTarget']==80 and st['settings']['name']==L['settings']['name'])
     check('1 manual quiz results preserved', pr['quizzes']==L['quizzes'])
     check('1 Udemy progress preserved as course', pr['course']['lectureTitle']==L['udemy']['lectureTitle'] and pr['course']['progress']==34)
     check('1 activity & achievements preserved', pr['activity']==L['activity'] and all(k in pr['achievements'] for k in L['achievements']))

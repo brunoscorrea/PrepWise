@@ -942,3 +942,56 @@ input[type="search"]::-webkit-search-cancel-button { filter: invert(0.6); }
 .guide-list a:hover { text-decoration: underline; }
 .guide-list a .ic { width: 15px; height: 15px; flex: none; margin-top: 2px; }
 .cert-card .cc-desc { margin: 0; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+
+/* ---------- Local profiles ---------- */
+.avatar { display: inline-grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 50%; background: var(--grad); color: #fff; font-size: 13px; font-weight: 700; letter-spacing: 0.02em; }
+.avatar.sm { width: 30px; height: 30px; font-size: 12px; }
+.avatar.lg { width: 52px; height: 52px; font-size: 19px; }
+.tb-profile { padding: 0; }
+.sb-profile { display: flex; align-items: center; gap: 10px; width: 100%; margin-top: auto; padding: 8px; border: 1px solid transparent; border-radius: 12px; background: transparent; color: var(--text); text-align: left; cursor: pointer; }
+.sb-profile:hover { background: var(--hover); border-color: var(--border); }
+.sb-profile + .sb-foot { margin-top: 6px; }
+.sbp-text { display: flex; flex-direction: column; min-width: 0; }
+.sbp-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sbp-sub { font-size: 11.5px; color: var(--muted); }
+.profile-current { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
+.pc-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pc-text strong { font-size: 17px; overflow-wrap: anywhere; }
+.profile-list { display: grid; gap: 8px; }
+.profile-row .pr-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.profile-row .pr-text strong { overflow-wrap: anywhere; }
+.menu-item .avatar { width: 26px; height: 26px; font-size: 11px; }
+.privacy-note { display: flex; gap: 12px; align-items: flex-start; margin-top: 16px; padding: 14px 16px; border-radius: 12px; background: var(--accent-soft); color: #c9d8ff; font-size: 13.5px; line-height: 1.5; }
+.privacy-note > .ic { width: 20px; height: 20px; flex: none; margin-top: 1px; color: var(--accent); }
+.privacy-note p { margin: 0 0 8px; }
+.privacy-note p:last-child { margin-bottom: 0; }
+.privacy-note strong { color: var(--text); font-weight: 600; }
+.btn-danger-text { color: var(--red); }
+
+/* First-run welcome */
+body.onboarding #app { visibility: hidden; }
+.onboard-root { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: max(24px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); overflow-y: auto;
+  background: radial-gradient(1200px 600px at 50% -10%, rgba(107,155,255,0.16), transparent 60%), var(--bg); }
+.onboard { width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 14px; padding: 28px 24px; border: 1px solid var(--border-strong); border-radius: 20px; background: var(--surface); box-shadow: 0 20px 60px rgba(0,0,0,0.35); }
+.onboard h1 { margin: 4px 0 0; font-size: 24px; line-height: 1.2; }
+.ob-logo svg { width: 46px; height: 46px; }
+.ob-sub { margin: 0; color: var(--text-2); font-size: 14.5px; line-height: 1.5; }
+.onboard .field { margin: 6px 0 0; }
+.onboard .input { font-size: 16px; }
+.ob-privacy { display: flex; gap: 10px; align-items: flex-start; margin: 4px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+.ob-privacy .ic { width: 16px; height: 16px; flex: none; margin-top: 2px; }
+
+@media (min-width: 1024px) {
+  .tb-profile { display: none; }
+  body.sb-collapsed .sbp-text { display: none; }
+  body.sb-collapsed .sb-profile { justify-content: center; padding: 6px 0; }
+}
+/* Phones: the greeting gets the space (profile lives in More and Settings) and may wrap. */
+.topbar h1.greet { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+@media (max-width: 639px) { .tb-profile { display: none; } }
+.menu-item.menu-profile { border-bottom: 1px solid var(--border); border-radius: 12px 12px 0 0; margin-bottom: 4px; }
+.menu-item.menu-profile .avatar { width: 30px; height: 30px; font-size: 12px; }
+.menu-profile .mp-text { display: flex; flex-direction: column; min-width: 0; flex: 1; text-align: left; }
+.menu-profile .mp-text span:last-child { font-size: 12px; color: var(--muted); }
+.menu-item > .avatar { flex: 0 0 auto; }
+.menu-item > .avatar + span { flex: 1; min-width: 0; text-align: left; }

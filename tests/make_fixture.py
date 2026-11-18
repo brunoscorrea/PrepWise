@@ -17,7 +17,7 @@ try:
         pg.evaluate('''() => {
           const s = window.__studyTracker.state;
           s.settings.startDate = '2026-11-02'; s.settings.dailyTargets = [45,60,60,60,60,180,150];
-          s.settings.name = 'Bruno'; s.settings.masteryTarget = 80;
+          s.settings.name = 'Sample User'; s.settings.masteryTarget = 80;
           s.sessions.slice(0,9).forEach((x,i)=>{ x.status = i===4?'partial':'completed'; x.actualSec = 3000+i*60; x.notes='note '+i; x.completedOn='2026-11-0'+(2+Math.min(i,7)); });
           s.sessions[2].lectures = [{id:'l1',title:'Lecture 12 Entra roles',done:true}];
           s.weeks[0].objectives[0].done = true; s.weeks[0].assessmentScore = 78; s.weeks[0].revision='done';

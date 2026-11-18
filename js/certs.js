@@ -106,8 +106,10 @@
   function exportAll() {
     const banks = {};
     Object.values(store().certs).forEach((c) => { if (c.bankSource === 'local') banks[c.id] = A.getQuestions(c.id).map(S.stripQuestion); });
-    download(`prepwise-backup-${fileDate()}.json`, S.backupFile(store(), banks));
-    toast('Backup exported', { icon: 'download' });
+    const prof = A.profile;
+    const slug = prof && prof.name ? S.slugify(prof.name).slice(0, 24) : '';
+    download(`prepwise-${slug ? `${slug}-` : ''}backup-${fileDate()}.json`, S.backupFile(store(), banks, prof ? { name: prof.name } : null));
+    toast('Profile backup exported. It contains your personal progress, so keep it private.', { icon: 'shield' });
   }
 
   // ---------------------------------------------------------------
@@ -259,9 +261,29 @@
     toast(`${rec.code} progress imported`, { icon: 'upload' });
   }
 
+  // A profile backup becomes a new local profile by default, so importing never
+  // silently overwrites anyone. Replacing the current profile needs typed confirmation.
   async function importBackup(res) {
     const n = res.summary.certifications;
-    const ok = await confirmDialog({ title: 'Restore a full backup?', body: `This replaces everything on this device with the backup (${plural(n, 'certification')}). A snapshot of the current data is kept first.`, ok: 'Restore backup', danger: true, requireText: 'RESTORE' });
+    const cur = A.profile;
+    const curName = (cur && cur.name) || 'this';
+    const fileName = res.summary.profileName || '';
+    const html = `<div class="preview"><div class="pv-head"><span class="cert-badge">${icon('user')}</span><div><strong>${fileName ? `${esc(fileName)}'s profile backup` : 'Profile backup'}</strong><div class="tiny muted">${plural(n, 'certification')}${res.summary.attempts ? ` · ${plural(res.summary.attempts, 'quiz attempt')}` : ''}${res.summary.exportedAt ? ` · exported ${esc(new Date(res.summary.exportedAt).toLocaleDateString())}` : ''}</div></div></div></div>`;
+    const choices = [
+      { id: 'new', label: 'Import as a new profile', hint: `Adds a separate profile. ${curName === 'this' ? 'The current' : `${curName}'s`} profile is not changed.`, cls: 'btn-primary', icon: 'plus' },
+      { id: 'replace', label: `Replace ${curName === 'this' ? 'this' : `${curName}'s`} data`, hint: 'Overwrites the progress in the current profile with the backup. A snapshot is kept.', cls: 'btn-danger', icon: 'refresh' },
+    ];
+    if (!A.profiles.length) choices.shift();
+    const pick = await choiceDialog({ title: 'Import a profile backup?', html, choices });
+    if (!pick) return;
+    if (pick === 'new') {
+      const name = fileName || (res.data.store.settings && res.data.store.settings.name) || 'Imported profile';
+      const st = A.clone(res.data.store);
+      st.settings = { ...(st.settings || {}), name: '' }; // the registry assigns a unique name
+      if (A.createProfile(name, { store: st, banks: res.data.banks })) toast('Opening the imported profile…', { icon: 'upload' });
+      return;
+    }
+    const ok = await confirmDialog({ title: `Replace ${curName === 'this' ? 'this profile\'s' : `${curName}'s`} data?`, body: `Everything in ${curName === 'this' ? 'this' : `${curName}'s`} profile is replaced by the backup (${plural(n, 'certification')}). Your profile name stays. Other profiles aren't affected. A snapshot of the current data is kept first.`, ok: 'Replace data', danger: true, requireText: 'RESTORE' });
     if (!ok) return;
     A.snapshot('Before restoring a backup');
     A.replaceStore(res.data.store, res.data.banks);

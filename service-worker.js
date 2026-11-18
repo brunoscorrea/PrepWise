@@ -1,6 +1,6 @@
 /* Offline-first service worker for PrepWise.
    Bump CACHE_VERSION whenever you change any app file so installed apps pick up the update. */
-const CACHE_VERSION = 'v2.1.0';
+const CACHE_VERSION = 'v2.2.0';
 const CACHE_PREFIX = 'prepwise-';
 const LEGACY_PREFIX = 'm365-study-tracker-'; // v1 caches, removed on activate
 const CACHE_NAME = `${CACHE_PREFIX}${CACHE_VERSION}`;
@@ -11,6 +11,7 @@ const APP_SHELL = [
   './app.js',
   './quiz-centre.js',
   './js/schema.js',
+  './js/profiles.js',
   './js/certs.js',
   './js/revision.js',
   './certifications/ab-650/meta.js',
