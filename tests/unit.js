@@ -1,0 +1,24 @@
+const S = require(require('path').join(__dirname,'..','js','schema.js'));
+const assert = require('assert');
+let n = 0; const t = (name, fn) => { fn(); n++; console.log('ok -', name); };
+// Load AB-650 bank in a fake window
+global.window = {}; for (const f of ['meta','questions-d1','questions-d2','questions-d3','profile']) require(require('path').join(__dirname,'..','certifications','ab-650',f+'.js'));
+const b = window.PrepWiseBuiltins[0];
+const cert = S.normaliseCertification(b.certification);
+const qs = b.questions();
+t('AB-650 bank has 167 questions and validates', () => { assert.equal(qs.length, 167); const r = S.validateQuestions(qs, cert.exam); assert.deepEqual(r.errors, []); });
+t('domains derived from objectives', () => { const n = qs.map(q => S.normaliseQuestion(q, cert.exam)); assert.deepEqual([...new Set(n.map(q=>q.domain))].sort(), ['1','2','3']); assert.equal(n.filter(q=>q.domain==='2').length, 66); });
+t('round-trip certification export', () => { const f = S.certificationFile(cert, qs); const r = S.parseImport(JSON.stringify(f)); assert.ok(r.ok, r.errors); assert.equal(r.summary.questions, 167); assert.equal(r.data.certification.id, 'ab-650'); assert.ok(!('progress' in f)); });
+t('invalid JSON rejected', () => { const r = S.parseImport('{bad'); assert.ok(!r.ok); assert.match(r.errors[0], /valid JSON/); });
+t('unknown format rejected', () => { assert.ok(!S.parseImport('{"a":1}').ok); });
+t('unsupported schema version', () => { const f = S.certificationFile(cert, []); f.schemaVersion = 99; const r = S.parseImport(JSON.stringify(f)); assert.ok(!r.ok); assert.match(r.errors[0], /not supported|isn't supported/); });
+t('missing mandatory fields', () => { const f = S.certificationFile(cert, []); delete f.certification.name; delete f.certification.code; const r = S.parseImport(JSON.stringify(f)); assert.ok(!r.ok); assert.ok(r.errors.some(e=>/name/.test(e)) && r.errors.some(e=>/code/.test(e))); });
+t('invalid certification id', () => { const f = S.certificationFile(cert, []); f.certification.id = 'Bad ID!'; const r = S.parseImport(JSON.stringify(f)); assert.ok(r.errors.some(e => /id/.test(e))); });
+t('duplicate question ids', () => { const f = S.certificationFile(cert, qs.slice(0,3)); f.questions[1].id = f.questions[0].id; const r = S.parseImport(JSON.stringify(f)); assert.ok(r.errors.some(e=>/Duplicate question id/.test(e))); });
+t('invalid answer references', () => { const f = S.certificationFile(cert, qs.slice(0,2)); const q = f.questions.find(x=>x.type==='single'); q.ans=[9]; const r = S.parseImport(JSON.stringify(f)); assert.ok(r.errors.some(e=>/doesn't exist/.test(e))); });
+t('unknown domain reference', () => { const f = S.certificationFile(cert, qs.slice(0,1)); f.questions[0].domain='9'; const r = S.parseImport(JSON.stringify(f)); assert.ok(r.errors.some(e=>/domain "9"/.test(e))); });
+t('progress file requires sessions', () => { const r = S.parseImport(JSON.stringify({format:'prepwise.progress',schemaVersion:1,certificationId:'x',progress:{}})); assert.ok(!r.ok); });
+t('legacy v1 detected', () => { const raw = require('fs').readFileSync(require('path').join(__dirname,'legacy_v1_state.json'),'utf8'); const r = S.parseImport(JSON.stringify({app:'m365-study-tracker',data:JSON.parse(raw)})); assert.ok(r.ok); assert.equal(r.kind,'legacy'); });
+t('uniqueId', () => { assert.equal(S.uniqueId('AZ-104', new Set(['az-104'])), 'az-104-2'); });
+t('weights midpoint sum', () => { assert.equal(cert.exam.domains.reduce((a,d)=>a+(d.weight[0]+d.weight[1])/2,0), 102.5); });
+console.log(n, 'unit tests passed');

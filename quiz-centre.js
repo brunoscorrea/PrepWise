@@ -1,37 +1,73 @@
 /* =========================================================
-   AB-650 Quiz Centre — plugs into the Study Tracker via window.StudyApp.
-   Question bank: ab650/*.js (original practice questions, not exam content).
+   PrepWise Quiz Centre — a reusable quiz engine that always runs inside the
+   active certification. Questions, attempts, statistics, bookmarks and mastery
+   come only from that certification's own bank and progress, so nothing can
+   leak between certifications. Plugs into the app via window.PrepWise.
    ========================================================= */
 'use strict';
 
 (() => {
-  const A = window.StudyApp;
-  const B = window.AB650;
-  if (!A || !B) { console.warn('Quiz Centre: StudyApp or question bank missing'); return; }
-  const { icon, esc, toast, confirmDialog, bar, todayISO, toISO, parseISO, addDays, daysBetween, clamp } = A;
+  const A = window.PrepWise;
+  if (!A) { console.warn('Quiz Centre: PrepWise core missing'); return; }
+  const { icon, esc, toast, confirmDialog, bar, todayISO, toISO, addDays, clamp } = A;
 
   // ---------------------------------------------------------------
-  // Constants
+  // Active certification context
   // ---------------------------------------------------------------
-  const QS = B.questions;
-  const QMAP = new Map(QS.map((q) => [q.id, q]));
-  const domOf = (q) => Number(q.obj[0]);
-  const MASTERY = 85;              // % target per domain
-  const MIN_COVERAGE = 0.6;        // share of a domain's questions you must have answered before it can count as mastered
-  const WEIGHT = { 1: 22.5, 2: 42.5, 3: 37.5 }; // midpoints of the official ranges
-  const WEEK_SECTIONS = { 1: ['1.1', '2.1'], 2: ['2.2', '2.3'], 3: ['1.2', '2.4'], 4: ['3.1', '3.2', '3.3', '3.4'] };
+  const EMPTY_EXAM = { domains: [], objectives: {}, sections: {}, refs: {}, weekSections: {}, modes: { mock: { count: 50, minutes: 100 }, final: { count: 60, minutes: 120 } }, minCoverage: 0.6, seed: '', disclaimer: '' };
+  const X = () => (A.cert ? A.cert.exam : EMPTY_EXAM);
+  let QS = [];
+  let QMAP = new Map();
+  let DOMS = [];
+  function rebuild() {
+    QS = A.cert ? A.getQuestions(A.cert.id) : [];
+    QMAP = new Map(QS.map((q) => [q.id, q]));
+    DOMS = X().domains.filter((d) => QS.some((q) => q.domain === d.id) || !QS.length);
+    if (!DOMS.length) DOMS = X().domains;
+    const mk = X().modes;
+    Object.assign(MODES.mock, { count: mk.mock.count, minutes: mk.mock.minutes, desc: `${mk.mock.count} questions weighted to the exam domains · ${mk.mock.minutes}-minute timer` });
+    Object.assign(MODES.final, { count: mk.final.count, minutes: mk.final.minutes, desc: `${mk.final.count} questions across all domains · ${mk.final.minutes}-minute timer` });
+  }
+  const domOf = (q) => q.domain;
+  const domIds = () => DOMS.map((d) => d.id);
+  const domById = (id) => DOMS.find((d) => d.id === String(id)) || X().domains.find((d) => d.id === String(id));
+  const domIndex = (id) => { const i = X().domains.findIndex((d) => d.id === String(id)); return i >= 0 ? i + 1 : id; };
+  const domLabel = (id) => `Domain ${domIndex(id)}`;
+  const domShort = (id) => (domById(id) || {}).short || String(id);
+  const domTitle = (id) => (domById(id) || {}).title || String(id);
+  const mastery = () => (A.state ? A.state.settings.masteryTarget : 85);
+  const minCoverage = () => X().minCoverage || 0.6;
+  // Domain weights: midpoints of the official ranges, or equal weights when a range is missing.
+  function weights() {
+    const w = {};
+    const all = DOMS.every((d) => d.weight);
+    DOMS.forEach((d) => { w[d.id] = all ? (d.weight[0] + d.weight[1]) / 2 : 1; });
+    return w;
+  }
+  const weightSum = () => Object.values(weights()).reduce((a, b) => a + b, 0) || 1;
+  const seedKey = () => X().seed || (A.cert ? A.cert.id : 'prepwise');
+  function sectionOf(obj) {
+    const secs = X().sections || {};
+    const hit = Object.keys(secs).filter((k) => obj === k || String(obj).startsWith(`${k}.`)).sort((a, b) => b.length - a.length)[0];
+    return hit ? secs[hit] : '';
+  }
+  const weekSections = (w) => (X().weekSections || {})[w] || null;
+  const hasWeekQuizzes = () => Object.keys(X().weekSections || {}).length > 0;
+  const inSections = (q, secs) => secs.some((s) => q.obj === s || String(q.obj).startsWith(`${s}.`));
+  const weekPool = (w) => { const secs = weekSections(w); return secs ? QS.filter((q) => inSections(q, secs)) : []; };
+
   const TYPE_LABEL = { single: 'Single answer', multi: 'Multiple answers', order: 'Ordering', match: 'Matching' };
   const DIFF_LABEL = { easy: 'Easy', intermediate: 'Intermediate', advanced: 'Advanced' };
   const MODES = {
     quick: { title: 'Quick Quiz', count: 10, minutes: 10, desc: '10 random questions · about 10 minutes', icon: 'play' },
     standard: { title: 'Standard Quiz', count: 25, minutes: 30, desc: '25 questions · about 25–30 minutes', icon: 'book' },
-    mock: { title: 'Full Mock Exam', count: 50, minutes: 100, examOnly: true, weighted: true, desc: '50 questions weighted to the official domains · 100-minute timer', icon: 'clock' },
-    domain: { title: 'Domain Quiz', count: 20, minutes: 25, desc: 'Focus on one official exam domain', icon: 'target' },
+    mock: { title: 'Full Mock Exam', count: 50, minutes: 100, examOnly: true, weighted: true, desc: '', icon: 'clock' },
+    domain: { title: 'Domain Quiz', count: 20, minutes: 25, desc: 'Focus on one exam domain', icon: 'target' },
     weak: { title: 'Weak Areas', count: 20, minutes: 25, desc: 'Questions you previously got wrong', icon: 'refresh' },
-    flagged: { title: 'Flagged Questions', count: 30, minutes: 35, desc: 'Questions you flagged for revision', icon: 'star' },
+    flagged: { title: 'Bookmarked Questions', count: 30, minutes: 35, desc: 'Questions you bookmarked for revision', icon: 'bookmark' },
     daily: { title: 'Daily Challenge', count: 5, practiceOnly: true, desc: '5 questions a day · keep your streak', icon: 'flame' },
     week: { title: 'Week Revision', count: 20, minutes: 25, desc: 'Revision assessment for a programme week', icon: 'calendar' },
-    final: { title: 'Final Mock Assessment', count: 60, minutes: 120, examOnly: true, weighted: true, desc: '60 questions across all domains · 120-minute timer', icon: 'trophy' },
+    final: { title: 'Final Mock Assessment', count: 60, minutes: 120, examOnly: true, weighted: true, desc: '', icon: 'trophy' },
     retry: { title: 'Retry Incorrect', count: 60, minutes: 60, desc: 'Retry the questions you missed', icon: 'refresh' },
   };
 
@@ -54,14 +90,21 @@
   const pct = (c, t) => (t ? (c / t) * 100 : 0);
   const fmtMS = (sec) => { sec = Math.max(0, Math.round(sec)); const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60; return h ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`; };
   const fmtDur = (sec) => { const m = Math.round(sec / 60); return m < 1 ? `${Math.round(sec)}s` : m < 60 ? `${m} min` : `${Math.floor(m / 60)}h ${m % 60}m`; };
-  const refOf = (q) => { const r = B.refs[q.ref]; return r ? { url: r[0], title: r[1] } : null; };
+  function refOf(q) {
+    if (q.refUrl) return { url: q.refUrl, title: q.refTitle || 'Reference' };
+    const r = q.ref && X().refs[q.ref];
+    return r ? { url: r[0], title: r[1] } : null;
+  }
+  const refLabel = (ref) => (/^https:\/\/learn\.microsoft\.com\//.test(ref.url) ? `Microsoft Learn: ${ref.title}` : ref.title);
   const LETTERS = 'ABCDEFGH';
 
   // ---------------------------------------------------------------
-  // Persistent quiz state (lives inside the app state → same storage, export/import, reset)
+  // Persistent quiz state — stored inside the active certification's progress
   // ---------------------------------------------------------------
+  const DUMMY = { attempts: [], stats: {}, flagged: [], daily: {}, weekBest: {}, prefs: { exam: false, diff: 'all', domain: null }, active: null };
   function qs() {
     const s = A.state;
+    if (!s) return DUMMY;
     if (!s.quiz || typeof s.quiz !== 'object') s.quiz = {};
     const q = s.quiz;
     if (!Array.isArray(q.attempts)) q.attempts = [];
@@ -69,12 +112,16 @@
     if (!Array.isArray(q.flagged)) q.flagged = [];
     if (!q.daily || typeof q.daily !== 'object') q.daily = {};
     if (!q.weekBest || typeof q.weekBest !== 'object') q.weekBest = {};
-    if (!q.prefs || typeof q.prefs !== 'object') q.prefs = { exam: false, diff: 'all', domain: 1 };
-    if (q.active && (!Array.isArray(q.active.items) || q.active.items.some((it) => !QMAP.has(it.q)))) q.active = null;
+    if (!q.prefs || typeof q.prefs !== 'object') q.prefs = { exam: false, diff: 'all', domain: null };
     if (q.active === undefined) q.active = null;
-    q.flagged = q.flagged.filter((id) => QMAP.has(id));
+    // Only prune against a loaded bank, so a missing bank never wipes bookmarks.
+    if (QS.length) {
+      if (q.active && (!Array.isArray(q.active.items) || q.active.items.some((it) => !QMAP.has(it.q)))) q.active = null;
+      q.flagged = q.flagged.filter((id) => QMAP.has(id));
+    }
     return q;
   }
+  const activeOk = () => { const a = qs().active; return !!(a && QS.length && a.items.every((it) => QMAP.has(it.q))); };
 
   // ---------------------------------------------------------------
   // Analytics
@@ -86,18 +133,19 @@
     pool.forEach((q) => { const s = st[q.id]; if (s && s.n) { seen++; lastOk += s.last ? 1 : 0; n += s.n; c += s.c; } });
     const coverage = pool.length ? seen / pool.length : 0;
     const accuracy = seen ? (lastOk / seen) * 100 : 0;
-    const mastery = accuracy * Math.min(1, coverage / MIN_COVERAGE);
-    return { d, total: pool.length, seen, coverage, accuracy, allTime: pct(c, n), answers: n, mastery, mastered: mastery >= MASTERY };
+    const m = accuracy * Math.min(1, coverage / minCoverage());
+    return { d, total: pool.length, seen, coverage, accuracy, allTime: pct(c, n), answers: n, mastery: m, mastered: pool.length > 0 && m >= mastery() };
   }
-  function allDomainStats() { return [1, 2, 3].map(domainStats); }
+  function allDomainStats() { return domIds().map(domainStats); }
   function readiness() {
     const ds = allDomainStats();
-    const weighted = ds.reduce((a, s) => a + s.mastery * WEIGHT[s.d], 0) / 102.5; // normalise midpoints (sum 102.5)
-    return { ds, score: weighted, masteredCount: ds.filter((s) => s.mastered).length, ready: ds.every((s) => s.mastered) };
+    const W = weights();
+    const weighted = ds.reduce((a, s) => a + s.mastery * W[s.d], 0) / weightSum();
+    return { ds, score: QS.length ? weighted : 0, masteredCount: ds.filter((s) => s.mastered).length, ready: QS.length > 0 && ds.length > 0 && ds.every((s) => s.mastered), hasBank: QS.length > 0 };
   }
   function overallStats() {
     const q = qs();
-    const st = Object.values(q.stats);
+    const st = Object.entries(q.stats).filter(([id]) => !QS.length || QMAP.has(id)).map(([, s]) => s);
     const answers = st.reduce((a, s) => a + s.n, 0), correct = st.reduce((a, s) => a + s.c, 0);
     const done = q.attempts;
     return {
@@ -107,6 +155,11 @@
       quizzes: done.length,
       avgScore: done.length ? done.reduce((a, t) => a + t.pct, 0) / done.length : 0,
     };
+  }
+  // Average of the most recent quizzes with 10+ questions (used by the readiness score).
+  function recentAssessment(n = 3) {
+    const list = qs().attempts.filter((t) => t.total >= 10).slice(-n);
+    return { count: list.length, pct: list.length ? list.reduce((a, t) => a + t.pct, 0) / list.length : 0, titles: list.map((t) => t.title) };
   }
   function weakPool() {
     const st = qs().stats;
@@ -121,17 +174,40 @@
     while (d[toISO(day)]) { n++; day = addDays(day, -1); }
     return n;
   }
-  function weakTopics(limit = 5) {
+  function topicStats() {
     const st = qs().stats;
     const byTopic = {};
     QS.forEach((q) => {
       const s = st[q.id];
       if (!s || !s.n) return;
-      const t = byTopic[q.topic] || (byTopic[q.topic] = { topic: q.topic, obj: q.obj, n: 0, c: 0, ref: q.ref });
-      t.n += 1; t.c += s.last ? 1 : 0;
+      const t = byTopic[q.topic] || (byTopic[q.topic] = { topic: q.topic, obj: q.obj, objs: new Set(), domain: q.domain, n: 0, c: 0, ref: q.ref, refUrl: q.refUrl, refTitle: q.refTitle });
+      t.n += 1; t.c += s.last ? 1 : 0; if (q.obj) t.objs.add(q.obj);
     });
-    return Object.values(byTopic).filter((t) => t.n >= 1 && t.c / t.n < MASTERY / 100)
+    return Object.values(byTopic);
+  }
+  function weakTopics(limit = 5) {
+    return topicStats().filter((t) => t.n >= 1 && t.c / t.n < mastery() / 100)
       .sort((a, b) => a.c / a.n - b.c / b.n || b.n - a.n).slice(0, limit);
+  }
+  // Study recommendations based only on saved results.
+  function studyRecommendations(limit = 3) {
+    const recs = [];
+    topicStats().filter((t) => t.n >= 2 && pct(t.c, t.n) < mastery())
+      .sort((a, b) => a.c / a.n - b.c / b.n || b.n - a.n).slice(0, limit)
+      .forEach((t) => {
+        const objTexts = [...t.objs].map((o) => X().objectives[o]).filter(Boolean);
+        const focus = objTexts.length ? objTexts[0].replace(/\.$/, '') : `the ${t.topic} material`;
+        recs.push({
+          kind: 'topic', topic: t.topic, pct: pct(t.c, t.n), n: t.n, obj: t.obj, ref: refOf(t),
+          text: `You scored ${Math.round(pct(t.c, t.n))}% in ${t.topic} (${t.c} of ${t.n} on your latest attempts). Consider revisiting “${focus}” before attempting another assessment.`,
+        });
+      });
+    if (recs.length < limit) {
+      allDomainStats().filter((d) => d.seen >= 5 && d.accuracy < mastery()).sort((a, b) => a.accuracy - b.accuracy).slice(0, limit - recs.length).forEach((d) => {
+        recs.push({ kind: 'domain', domain: d.d, pct: d.accuracy, n: d.seen, text: `Your accuracy in ${domLabel(d.d)} (${domShort(d.d)}) is ${Math.round(d.accuracy)}% across ${d.seen} questions. A domain quiz will show which topics to revisit.` });
+      });
+    }
+    return recs;
   }
 
   // ---------------------------------------------------------------
@@ -140,11 +216,11 @@
   function pickBalanced(pool, n, rng = Math.random, useStats = true) {
     const st = qs().stats;
     const groups = {};
-    pool.forEach((q) => (groups[q.obj] = groups[q.obj] || []).push(q));
-    Object.values(groups).forEach((g) => {
-      const sh = shuffle(g, rng);
+    pool.forEach((q) => (groups[q.obj || q.topic] = groups[q.obj || q.topic] || []).push(q));
+    Object.keys(groups).forEach((k) => {
+      const sh = shuffle(groups[k], rng);
       if (useStats) sh.sort((a, b) => ((st[a.id] && st[a.id].n) || 0) - ((st[b.id] && st[b.id].n) || 0));
-      groups[Object.keys(groups).find((k) => groups[k] === g)] = sh;
+      groups[k] = sh;
     });
     const keys = shuffle(Object.keys(groups), rng);
     const out = [];
@@ -154,27 +230,29 @@
     return shuffle(out, rng);
   }
   function weightedCounts(n) {
-    const raw = [1, 2, 3].map((d) => ({ d, v: (n * WEIGHT[d]) / 102.5 }));
+    const W = weights(), sum = weightSum();
+    const raw = domIds().map((d) => ({ d, v: (n * W[d]) / sum }));
     raw.forEach((r) => { r.f = Math.floor(r.v); r.rem = r.v - r.f; });
     let left = n - raw.reduce((a, r) => a + r.f, 0);
     raw.slice().sort((a, b) => b.rem - a.rem).forEach((r) => { if (left > 0) { r.f++; left--; } });
     return Object.fromEntries(raw.map((r) => [r.d, r.f]));
   }
   const diffFilter = (pool, diff) => (diff && diff !== 'all' ? pool.filter((q) => q.diff === diff) : pool);
+  const firstDomain = () => (DOMS[0] ? DOMS[0].id : null);
 
   function selectQuestions(cfg) {
     const m = MODES[cfg.mode];
     if (cfg.mode === 'mock' || cfg.mode === 'final') {
       const counts = weightedCounts(m.count);
-      return [1, 2, 3].flatMap((d) => pickBalanced(QS.filter((q) => domOf(q) === d), counts[d]));
+      return domIds().flatMap((d) => pickBalanced(QS.filter((q) => domOf(q) === d), counts[d]));
     }
     if (cfg.mode === 'daily') {
-      const rng = seeded(`ab650-daily-${todayISO()}`);
-      const counts = { 1: 1, 2: 2, 3: 2 };
-      return shuffle([1, 2, 3].flatMap((d) => shuffle(QS.filter((q) => domOf(q) === d), rng).slice(0, counts[d])), rng);
+      const rng = seeded(`${seedKey()}-daily-${todayISO()}`);
+      const counts = weightedCounts(5);
+      return shuffle(domIds().flatMap((d) => shuffle(QS.filter((q) => domOf(q) === d), rng).slice(0, counts[d])), rng);
     }
-    if (cfg.mode === 'domain') return pickBalanced(diffFilter(QS.filter((q) => domOf(q) === cfg.domain), cfg.diff), m.count);
-    if (cfg.mode === 'week') return pickBalanced(QS.filter((q) => WEEK_SECTIONS[cfg.week].includes(q.obj.slice(0, 3))), m.count);
+    if (cfg.mode === 'domain') return pickBalanced(diffFilter(QS.filter((q) => domOf(q) === String(cfg.domain)), cfg.diff), m.count);
+    if (cfg.mode === 'week') return pickBalanced(weekPool(cfg.week), m.count);
     if (cfg.mode === 'weak') return shuffle(diffFilter(weakPool(), cfg.diff).slice(0, m.count));
     if (cfg.mode === 'flagged') return shuffle(qs().flagged.map((id) => QMAP.get(id)).filter(Boolean)).slice(0, m.count);
     if (cfg.mode === 'retry') return shuffle((cfg.ids || []).map((id) => QMAP.get(id)).filter(Boolean));
@@ -192,7 +270,6 @@
     return it;
   }
 
-  // ---------------------------------------------------------------
   // Answers & scoring
   // ---------------------------------------------------------------
   function isAnswered(q, r) {
@@ -220,15 +297,15 @@
     const m = MODES[cfg.mode];
     const qList = selectQuestions(cfg);
     if (!qList.length) {
-      toast(cfg.mode === 'weak' ? 'No incorrect answers yet. Take a quiz first.' : cfg.mode === 'flagged' ? 'No flagged questions yet.' : 'No questions match those filters.', { icon: 'x' });
+      toast(cfg.mode === 'weak' ? 'No incorrect answers yet. Take a quiz first.' : cfg.mode === 'flagged' ? 'No bookmarked questions yet.' : 'No questions match those filters.', { icon: 'x' });
       return;
     }
     const exam = m.examOnly ? true : m.practiceOnly ? false : !!cfg.exam;
-    const rng = cfg.mode === 'daily' ? seeded(`ab650-daily-items-${todayISO()}`) : Math.random;
-    const title = cfg.mode === 'domain' ? `Domain ${cfg.domain}: ${B.domains[cfg.domain - 1].short}`
+    const rng = cfg.mode === 'daily' ? seeded(`${seedKey()}-daily-items-${todayISO()}`) : Math.random;
+    const title = cfg.mode === 'domain' ? `${domLabel(cfg.domain)}: ${domShort(cfg.domain)}`
       : cfg.mode === 'week' ? `Week ${cfg.week} revision assessment` : m.title;
     qs().active = {
-      id: A.uid(), mode: cfg.mode, title, exam, diff: cfg.diff || 'all', domain: cfg.domain || null, week: cfg.week || null,
+      id: A.uid(), cert: A.cert.id, mode: cfg.mode, title, exam, diff: cfg.diff || 'all', domain: cfg.domain != null ? String(cfg.domain) : null, week: cfg.week || null,
       startedAt: Date.now(), limitSec: exam && m.minutes ? Math.round((m.minutes * qList.length) / m.count) * 60 : null,
       items: qList.map((q) => makeItem(q, rng)), idx: 0, resp: {}, submitted: {}, counted: {}, flags: [],
     };
@@ -259,7 +336,7 @@
       (byDiff[qq.diff] = byDiff[qq.diff] || [0, 0])[1]++; if (x.ok) byDiff[qq.diff][0]++;
     });
     const attempt = {
-      id: s.id, mode: s.mode, title: s.title, exam: s.exam, week: s.week, domain: s.domain,
+      id: s.id, cert: s.cert || (A.cert && A.cert.id), mode: s.mode, title: s.title, exam: s.exam, week: s.week, domain: s.domain,
       date: new Date().toISOString(), durationSec, total: items.length, correct, pct: Math.round(pct(correct, items.length) * 10) / 10,
       byDomain, byDiff, items, reason: reason || 'finished',
     };
@@ -276,11 +353,12 @@
     A.save(true);
     showResults(attempt.id, true);
     A.checkAchievements();
-    if ((s.mode === 'mock' || s.mode === 'final') && attempt.pct >= MASTERY) {
-      A.celebrate(s.mode === 'final' ? 'Final assessment passed' : 'Mock exam passed', `${Math.round(attempt.pct)}% — above your ${MASTERY}% target.`);
+    if ((s.mode === 'mock' || s.mode === 'final') && attempt.pct >= mastery()) {
+      A.celebrate(s.mode === 'final' ? 'Final assessment passed' : 'Mock exam passed', `${Math.round(attempt.pct)}% — above your ${mastery()}% target.`);
     }
   }
 
+  // ---------------------------------------------------------------
   // ---------------------------------------------------------------
   // Player (full-screen overlay)
   // ---------------------------------------------------------------
@@ -292,6 +370,7 @@
     P.hasHistory = true;
   }
   function openPlayer(adopt = false) {
+    if (!activeOk()) { toast('This quiz can\'t be resumed because its questions are no longer in the bank.', { icon: 'x' }); qs().active = null; A.save(); A.renderCurrent(); return; }
     P.el = document.getElementById('quiz-player');
     P.mode = 'quiz';
     P.el.hidden = false;
@@ -338,8 +417,8 @@
 
   function chipRow(q) {
     return `<div class="qx-chips">
-      <span class="chip blue">Domain ${domOf(q)}</span>
-      <span class="chip">${esc(q.obj)}</span>
+      <span class="chip blue">${esc(domLabel(domOf(q)))}</span>
+      ${q.obj ? `<span class="chip">${esc(q.obj)}</span>` : `<span class="chip">${esc(q.topic)}</span>`}
       <span class="chip ${q.diff === 'advanced' ? 'red' : q.diff === 'intermediate' ? 'amber' : 'teal'}">${DIFF_LABEL[q.diff]}</span>
       <span class="chip violet">${TYPE_LABEL[q.type]}${q.scenario ? ' · Scenario' : ''}</span>
     </div>`;
@@ -402,14 +481,14 @@
     return `<div class="qx-explain ${ok ? 'ok' : 'bad'}">
       <div class="qx-verdict">${ok ? `${icon('check')} Correct` : isAnswered(q, r) ? `${icon('x')} Incorrect` : `${icon('x')} Not answered`}</div>
       <div class="qx-sec"><h4>Correct answer</h4>${correct}</div>
-      <div class="qx-sec"><h4>Why this is correct</h4><p>${esc(q.exp)}</p></div>
+      ${q.exp ? `<div class="qx-sec"><h4>Why this is correct</h4><p>${esc(q.exp)}</p></div>` : ''}
       ${wrongs ? `<div class="qx-sec"><h4>Why the other options are wrong</h4><ul class="qx-wrongs">${wrongs}</ul></div>` : ''}
       <div class="qx-sec qx-meta">
-        <div><span class="k">Technology</span><span>${esc(q.feat)}</span></div>
-        <div><span class="k">Exam objective</span><span>${esc(q.obj)} · ${esc(B.objectives[q.obj] || '')}</span></div>
-        <div><span class="k">Section</span><span>${esc(B.sections[q.obj.slice(0, 3)] || '')}</span></div>
+        ${q.feat ? `<div><span class="k">Technology</span><span>${esc(q.feat)}</span></div>` : ''}
+        ${q.obj ? `<div><span class="k">Exam objective</span><span>${esc(q.obj)}${X().objectives[q.obj] ? ` · ${esc(X().objectives[q.obj])}` : ''}</span></div>` : `<div><span class="k">Topic</span><span>${esc(q.topic)}</span></div>`}
+        ${sectionOf(q.obj) ? `<div><span class="k">Section</span><span>${esc(sectionOf(q.obj))}</span></div>` : ''}
       </div>
-      ${ref ? `<a class="btn btn-sm qx-learn" href="${esc(ref.url)}" target="_blank" rel="noopener">${icon('external')} Microsoft Learn: ${esc(ref.title)}</a>` : ''}
+      ${ref ? `<a class="btn btn-sm qx-learn" href="${esc(ref.url)}" target="_blank" rel="noopener">${icon('external')} ${esc(refLabel(ref))}</a>` : ''}
     </div>`;
   }
 
@@ -440,7 +519,7 @@
         <div class="qx-timer ${s.limitSec ? 'count' : ''} ${rem != null && rem < 300 ? 'low' : ''}">${icon('clock')}<span data-qx-timer class="num">${s.limitSec ? fmtMS(rem) : fmtMS((Date.now() - s.startedAt) / 1000)}</span></div>
       </div>
       <div class="qx-progress"><div class="qx-pbar"><span style="width:${((s.idx + 1) / total) * 100}%"></span></div>
-        <div class="qx-pmeta"><span class="num">Question ${s.idx + 1} of ${total}</span><span class="num">${answeredCount} answered${s.flags.length ? ` · ${s.flags.length} flagged` : ''}</span></div></div>
+        <div class="qx-pmeta"><span class="num">Question ${s.idx + 1} of ${total}</span><span class="num">${answeredCount} answered${s.flags.length ? ` · ${s.flags.length} bookmarked` : ''}</span></div></div>
       <div class="qx-body" id="qx-body">
         ${chipRow(q)}
         <div class="qx-q">${esc(q.q)}</div>
@@ -450,7 +529,7 @@
       </div>
       <div class="qx-foot">
         <button class="icon-btn" data-qa="prev" aria-label="Previous question" ${s.idx === 0 ? 'disabled' : ''}>${icon('chevron', 'flip')}</button>
-        <button class="icon-btn ${flagged ? 'flag-on' : ''}" data-qa="flag" aria-label="${flagged ? 'Unflag' : 'Flag for review'}">${icon('star')}</button>
+        <button class="icon-btn ${flagged ? 'flag-on' : ''}" data-qa="flag" aria-label="${flagged ? 'Remove bookmark' : 'Bookmark for revision'}" aria-pressed="${flagged}">${icon('bookmark')}</button>
         <button class="icon-btn" data-qa="nav" aria-label="All questions">${icon('dashboard')}</button>
         ${primary}
         ${s.exam && !isLast ? `<button class="btn btn-ghost btn-sm qx-finish-sm" data-qa="finish">Finish</button>` : ''}
@@ -471,7 +550,7 @@
         const res = !s.exam && s.submitted[i] ? (isCorrect(q, s.resp[i]) ? ' ok' : ' bad') : '';
         return `<button class="qx-navcell${ans ? ' answered' : ''}${s.flags.includes(i) ? ' flagged' : ''}${i === s.idx ? ' current' : ''}${res}" data-qa="goto" data-i="${i}">${i + 1}</button>`;
       }).join('')}</div>
-      <div class="cd-legend"><span><i style="background:var(--accent)"></i>Answered</span><span><i style="background:var(--amber)"></i>Flagged</span><span><i style="border:1.5px solid var(--text)"></i>Current</span></div>
+      <div class="cd-legend"><span><i style="background:var(--accent)"></i>Answered</span><span><i style="background:var(--amber)"></i>Bookmarked</span><span><i style="border:1.5px solid var(--text)"></i>Current</span></div>
       <button class="btn btn-primary btn-block" style="margin-top:18px" data-qa="finish">${s.exam ? 'Finish exam' : 'Finish and see results'}</button>`);
   }
 
@@ -499,13 +578,15 @@
     renderResults(fresh);
   }
 
-  function renderResults() {
+  function renderResults(keepScroll = false) {
+    const prevBody = keepScroll && P.el.querySelector('.qx-body');
+    const prevScroll = prevBody ? prevBody.scrollTop : 0;
     const t = qs().attempts.find((a) => a.id === P.attemptId);
     if (!t) { closePlayer(); return; }
-    const pass = t.pct >= MASTERY;
+    const pass = t.pct >= mastery();
     const wrong = t.items.filter((x) => !x.ok);
     const topics = {};
-    wrong.forEach((x) => { const q = QMAP.get(x.q); if (!q) return; const k = q.topic; (topics[k] = topics[k] || { topic: k, obj: q.obj, n: 0, ref: q.ref }).n++; });
+    wrong.forEach((x) => { const q = QMAP.get(x.q); if (!q) return; const k = q.topic; (topics[k] = topics[k] || { topic: k, obj: q.obj, n: 0, ref: q.ref, refUrl: q.refUrl, refTitle: q.refTitle }).n++; });
     const recs = Object.values(topics).sort((a, b) => b.n - a.n).slice(0, 6);
     const list = P.filter === 'wrong' ? t.items.map((x, i) => [x, i]).filter(([x]) => !x.ok) : t.items.map((x, i) => [x, i]);
     P.el.innerHTML = `
@@ -518,7 +599,7 @@
         <div class="card hero">
           <div class="ring-wrap">${A.ring(t.pct, 112, 10, 'resGrad')}<div class="ring-label"><span class="ring-value num">${Math.round(t.pct)}%</span><span class="ring-caption">score</span></div></div>
           <div class="hero-text">
-            <div class="phase" style="color:${pass ? 'var(--teal)' : 'var(--amber)'}">${pass ? 'At or above your 85% target' : `${Math.round(MASTERY - t.pct)} points below your 85% target`}</div>
+            <div class="phase" style="color:${pass ? 'var(--teal)' : 'var(--amber)'}">${pass ? `At or above your ${mastery()}% target` : `${Math.round(mastery() - t.pct)} points below your ${mastery()}% target`}</div>
             <p class="motivation">${pass ? 'Strong result. Keep reviewing the explanations to lock it in.' : 'Review the incorrect answers below, then try a Weak Areas quiz.'}</p>
           </div>
         </div>
@@ -530,27 +611,27 @@
         ${t.reason === 'timeout' ? '<div class="callout">Submitted automatically when the timer ran out.</div>' : ''}
 
         <div class="section-title">Performance by domain</div>
-        <div class="card week-bars">${[1, 2, 3].filter((d) => t.byDomain[d]).map((d) => {
+        <div class="card week-bars">${domIds().filter((d) => t.byDomain[d]).map((d) => {
           const [c, n] = t.byDomain[d]; const p = pct(c, n);
-          return `<div class="week-bar-row"><div class="row-top"><span class="label">Domain ${d} <span class="muted">· ${esc(B.domains[d - 1].short)}</span></span><span class="val num">${c}/${n} · ${Math.round(p)}%</span></div>${bar(p, p >= MASTERY ? 'teal' : p >= 60 ? '' : 'amber')}</div>`;
+          return `<div class="week-bar-row"><div class="row-top"><span class="label">${esc(domLabel(d))} <span class="muted">· ${esc(domShort(d))}</span></span><span class="val num">${c}/${n} · ${Math.round(p)}%</span></div>${bar(p, p >= mastery() ? 'teal' : p >= 60 ? '' : 'amber')}</div>`;
         }).join('')}</div>
 
         <div class="section-title">Performance by difficulty</div>
         <div class="card week-bars">${['easy', 'intermediate', 'advanced'].filter((d) => t.byDiff[d]).map((d) => {
           const [c, n] = t.byDiff[d]; const p = pct(c, n);
-          return `<div class="week-bar-row"><div class="row-top"><span class="label">${DIFF_LABEL[d]}</span><span class="val num">${c}/${n} · ${Math.round(p)}%</span></div>${bar(p, p >= MASTERY ? 'teal' : p >= 60 ? '' : 'amber')}</div>`;
+          return `<div class="week-bar-row"><div class="row-top"><span class="label">${DIFF_LABEL[d]}</span><span class="val num">${c}/${n} · ${Math.round(p)}%</span></div>${bar(p, p >= mastery() ? 'teal' : p >= 60 ? '' : 'amber')}</div>`;
         }).join('')}</div>
 
         ${recs.length ? `<div class="section-title">Recommended for revision</div>
-        <div class="card">${recs.map((r) => { const ref = B.refs[r.ref]; return `<div class="qx-rec"><div><div class="t">${esc(r.topic)}</div><div class="tiny muted">${esc(r.obj)} · ${esc(B.objectives[r.obj] || '')}</div></div>${ref ? `<a class="mini-btn" href="${esc(ref[0])}" target="_blank" rel="noopener" aria-label="Open Microsoft Learn">${icon('external')}</a>` : ''}</div>`; }).join('')}</div>` : ''}
+        <div class="card">${recs.map((r) => { const ref = refOf(r); return `<div class="qx-rec"><div><div class="t">${esc(r.topic)}</div><div class="tiny muted">${esc(r.obj)} · ${esc(X().objectives[r.obj] || '')}</div></div>${ref ? `<a class="mini-btn" href="${esc(ref.url)}" target="_blank" rel="noopener" aria-label="Open reference">${icon('external')}</a>` : ''}</div>`; }).join('')}</div>` : ''}
 
         <div class="section-title">Review answers
           <span class="qx-filter"><button class="${P.filter === 'wrong' ? 'on' : ''}" data-qa="rfilter" data-f="wrong">Incorrect (${wrong.length})</button><button class="${P.filter === 'all' ? 'on' : ''}" data-qa="rfilter" data-f="all">All (${t.total})</button></span></div>
         ${list.length ? list.map(([x, i]) => {
           const q = QMAP.get(x.q);
           if (!q) return '';
-          return `<details class="qx-review ${x.ok ? 'ok' : 'bad'}"><summary><span class="qx-rn num">${i + 1}</span><span class="qx-rv">${x.ok ? icon('check') : icon('x')}</span><span class="qx-rq">${esc(q.q)}</span></summary>
-            <div class="qx-rbody">${chipRow(q)}<div class="qx-q small-q">${esc(q.q)}</div>${optionsHTML(q, null, x.r, true, true)}${explanationHTML(q, x.r)}</div></details>`;
+          return `<details class="qx-review ${x.ok ? 'ok' : 'bad'}" data-i="${i}"><summary><span class="qx-rn num">${i + 1}</span><span class="qx-rv">${x.ok ? icon('check') : icon('x')}</span><span class="qx-rq">${esc(q.q)}</span></summary>
+            <div class="qx-rbody"><div class="qx-rtools">${chipRow(q)}<button class="mini-btn ${qs().flagged.includes(q.id) ? 'flag-on' : ''}" data-qa="bm" data-q="${esc(q.id)}" aria-label="${qs().flagged.includes(q.id) ? 'Remove bookmark' : 'Bookmark question'}">${icon('bookmark')}</button></div><div class="qx-q small-q">${esc(q.q)}</div>${optionsHTML(q, null, x.r, true, true)}${explanationHTML(q, x.r)}</div></details>`;
         }).join('') : '<div class="card empty">Nothing to review here. Every answer was correct.</div>'}
 
         <div class="btn-row" style="margin-top:18px">
@@ -559,7 +640,7 @@
         </div>
       </div>`;
     const body = P.el.querySelector('.qx-body');
-    if (body) body.scrollTop = 0;
+    if (body) body.scrollTop = prevScroll;
   }
 
   // ---------------------------------------------------------------
@@ -576,6 +657,7 @@
       return;
     }
     if (act === 'rfilter') { P.filter = el.dataset.f; renderResults(); return; }
+    if (act === 'bm') { toggleBookmark(el.dataset.q); const open = [...P.el.querySelectorAll('details[open]')].map((d) => d.dataset.i); renderResults(true); open.forEach((i) => { const d = P.el.querySelector(`details[data-i="${i}"]`); if (d) d.open = true; }); return; }
     if (act === 'retry') {
       const t = qs().attempts.find((a) => a.id === el.dataset.id);
       if (!t) return;
@@ -609,7 +691,7 @@
     else if (act === 'flag') {
       s.flags = s.flags.includes(s.idx) ? s.flags.filter((x) => x !== s.idx) : [...s.flags, s.idx];
       const f = qs().flagged;
-      if (s.flags.includes(s.idx)) { if (!f.includes(it.q)) f.push(it.q); toast('Flagged for revision', { icon: 'star', ms: 1400 }); }
+      if (s.flags.includes(s.idx)) { if (!f.includes(it.q)) f.push(it.q); toast('Bookmarked for revision', { icon: 'bookmark', ms: 1400 }); }
       else qs().flagged = f.filter((x) => x !== it.q);
     } else if (act === 'nav') { A.save(); navigatorSheet(); return; }
     else if (act === 'goto') { s.idx = Number(el.dataset.i); A.closeSheet(); }
@@ -632,27 +714,40 @@
     renderPlayer();
   }
 
+  function toggleBookmark(id) {
+    const q = qs();
+    if (q.flagged.includes(id)) { q.flagged = q.flagged.filter((x) => x !== id); toast('Bookmark removed', { icon: 'bookmark', ms: 1200 }); }
+    else { q.flagged.push(id); toast('Bookmarked for revision', { icon: 'bookmark', ms: 1200 }); }
+    A.save();
+  }
+
   // ---------------------------------------------------------------
   // Programme integration (study plan weeks)
   // ---------------------------------------------------------------
   function programmeContext(o) {
     const q = qs();
     const recs = [];
-    if (o.phase !== 'before') {
-      const lastWeek = o.phase === 'after' ? 4 : o.currentWeek;
+    if (!o) return { weekRecs: recs, finalUnlocked: false };
+    const W = o.W;
+    if (o.phase !== 'before' && hasWeekQuizzes()) {
+      const lastWeek = o.phase === 'after' ? W : o.currentWeek;
       for (let w = 1; w <= lastWeek; w++) {
-        const endOfWeek = o.phase === 'after' || o.dayNo >= w * 7 - 1; // Saturday of week w onwards
-        const sessionsDone = A.state.sessions.filter((s) => s.week === w).every((s) => s.status !== 'pending');
-        if ((endOfWeek || sessionsDone) && !(q.weekBest[w] >= MASTERY)) recs.push(w);
+        if (!weekPool(w).length) continue;
+        const endOfWeek = o.phase === 'after' || o.dayNo >= w * 7 - 1; // Day 6 of week w onwards
+        const ss = A.state.sessions.filter((s) => s.week === w);
+        const sessionsDone = ss.length > 0 && ss.every((s) => s.status !== 'pending');
+        if ((endOfWeek || sessionsDone) && !(q.weekBest[w] >= mastery())) recs.push(w);
       }
     }
-    const finalUnlocked = o.phase === 'after' || o.dayNo >= 27 || A.state.sessions.filter((s) => s.week === 4).every((s) => s.status !== 'pending');
+    const lastSessions = A.state.sessions.filter((s) => s.week === W);
+    const finalUnlocked = o.phase === 'after' || o.dayNo >= W * 7 - 1 || (lastSessions.length > 0 && lastSessions.every((s) => s.status !== 'pending'));
     return { weekRecs: recs, finalUnlocked };
   }
 
   function recommendation(o) {
     const q = qs();
-    if (q.active) return { title: `Resume: ${q.active.title}`, why: 'You have a quiz in progress.', action: 'resume' };
+    if (!QS.length) return null;
+    if (activeOk()) return { title: `Resume: ${q.active.title}`, why: 'You have a quiz in progress.', action: 'resume' };
     const ds = allDomainStats();
     const ctx = programmeContext(o);
     if (ctx.weekRecs.length) {
@@ -660,45 +755,71 @@
       return { title: `Week ${w} revision assessment`, why: `Week ${w} of your study programme is wrapping up. Check those topics before moving on.`, action: 'week', week: w };
     }
     const thin = ds.filter((d) => d.seen < Math.min(10, d.total)).sort((a, b) => a.seen - b.seen)[0];
-    if (thin) return { title: `Domain ${thin.d} quiz`, why: `You've answered only ${thin.seen} of ${thin.total} questions in ${B.domains[thin.d - 1].short}. Build coverage first.`, action: 'domain', domain: thin.d };
+    if (thin) return { title: `${domLabel(thin.d)} quiz`, why: `You've answered only ${thin.seen} of ${thin.total} questions in ${domShort(thin.d)}. Build coverage first.`, action: 'domain', domain: thin.d };
     const weak = weakPool();
     if (weak.length >= 5) return { title: 'Weak Areas quiz', why: `${weak.length} questions you've missed before are waiting for another attempt.`, action: 'weak' };
     const low = ds.filter((d) => !d.mastered).sort((a, b) => a.mastery - b.mastery)[0];
-    if (low) return { title: `Domain ${low.d} quiz`, why: `${B.domains[low.d - 1].short} is your weakest domain at ${Math.round(low.mastery)}% mastery.`, action: 'domain', domain: low.d };
+    if (low) return { title: `${domLabel(low.d)} quiz`, why: `${domShort(low.d)} is your weakest domain at ${Math.round(low.mastery)}% mastery.`, action: 'domain', domain: low.d };
     return { title: 'Full Mock Exam', why: 'All domains are at mastery. Test yourself under exam conditions.', action: 'mock' };
   }
 
   // ---------------------------------------------------------------
-  // Quiz Centre view
+  // Charts & small components
   // ---------------------------------------------------------------
   function historyChart(attempts) {
     const pts = attempts.slice(-20);
-    if (pts.length < 1) return '<div class="empty" style="padding:16px 6px">Complete a quiz to see your performance over time.</div>';
-    const W = 340, H = 160, L = 30, R = 10, T = 12, Bm = 22, iw = W - L - R, ih = H - T - Bm;
+    if (pts.length < 1) return A.emptyState('target', 'No quizzes yet', 'Complete a quiz to see your performance over time.');
+    const W = 640, H = 180, L = 30, R = 10, T = 12, Bm = 22, iw = W - L - R, ih = H - T - Bm;
     const y = (p) => T + ih * (1 - clamp(p, 0, 100) / 100);
     const n = pts.length;
     const x = (i) => (n === 1 ? L + iw / 2 : L + (iw * i) / (n - 1));
     const P2 = pts.map((a, i) => [x(i), y(a.pct)]);
     const line = P2.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
-    const grid = [0, 50, 100].map((g) => `<line x1="${L}" x2="${W - R}" y1="${y(g)}" y2="${y(g)}" stroke="rgba(255,255,255,0.06)"/><text class="axis" x="${L - 6}" y="${y(g) + 3}" text-anchor="end">${g}</text>`).join('');
+    const grid = [0, 50, 100].map((g) => `<line x1="${L}" x2="${W - R}" y1="${y(g)}" y2="${y(g)}" class="grid"/><text class="axis" x="${L - 6}" y="${y(g) + 3}" text-anchor="end">${g}</text>`).join('');
     const lab = [0, n - 1].filter((v, i, arr) => arr.indexOf(v) === i).map((i) => `<text class="axis" x="${x(i)}" y="${H - 6}" text-anchor="${i === 0 && n > 1 ? 'start' : i === n - 1 && n > 1 ? 'end' : 'middle'}">${A.fmtDate(pts[i].date.slice(0, 10), { day: 'numeric', month: 'short' })}</text>`).join('');
+    const M = mastery();
     return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Quiz scores over time">
       ${grid}
-      <line x1="${L}" x2="${W - R}" y1="${y(MASTERY)}" y2="${y(MASTERY)}" stroke="#2fd1b5" stroke-dasharray="5 5" stroke-width="1.4"/>
-      <text class="axis" x="${W - R}" y="${y(MASTERY) - 5}" text-anchor="end" style="fill:#2fd1b5">${MASTERY}% target</text>
-      ${n > 1 ? `<path d="${line}" fill="none" stroke="#5b9bff" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>` : ''}
-      ${P2.map((p, i) => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="4.5" fill="${pts[i].pct >= MASTERY ? '#2fd1b5' : '#f3b54a'}" stroke="#131a27" stroke-width="2"><title>${esc(pts[i].title)}: ${Math.round(pts[i].pct)}%</title></circle>`).join('')}
+      <line x1="${L}" x2="${W - R}" y1="${y(M)}" y2="${y(M)}" class="target-line"/>
+      <text class="axis target" x="${W - R}" y="${y(M) - 5}" text-anchor="end">${M}% target</text>
+      ${n > 1 ? `<path d="${line}" class="series"/>` : ''}
+      ${P2.map((p, i) => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="4.5" class="${pts[i].pct >= M ? 'pt-pass' : 'pt-fail'}"><title>${esc(pts[i].title)}: ${Math.round(pts[i].pct)}%</title></circle>`).join('')}
       ${lab}
     </svg>`;
   }
-
   function masteryBar(m) {
-    return `<div class="qx-mbar"><div class="bar ${m >= MASTERY ? 'teal' : ''}"><span style="width:${clamp(m, 0, 100).toFixed(1)}%"></span></div><i style="left:${MASTERY}%"></i></div>`;
+    return `<div class="qx-mbar"><div class="bar ${m >= mastery() ? 'teal' : ''}"><span style="width:${clamp(m, 0, 100).toFixed(1)}%"></span></div><i style="left:${mastery()}%"></i></div>`;
+  }
+  function domainRows(ds, { compact = false } = {}) {
+    return ds.map((d) => {
+      const dom = domById(d.d) || {};
+      return `<div class="dom-row ${compact ? 'compact' : ''}">
+        <div class="dom-top">
+          <div class="dom-name"><span class="dom-k">${esc(domLabel(d.d))}${dom.weight ? ` · ${dom.weight[0]}–${dom.weight[1]}%` : ''}</span><span class="dom-t">${esc(compact ? dom.short : dom.title)}</span></div>
+          <div class="dom-v num">${d.mastered ? `<span class="chip teal">${icon('check')}${Math.round(d.mastery)}%</span>` : `${Math.round(d.mastery)}%`}</div>
+        </div>
+        ${masteryBar(d.mastery)}
+        ${compact ? '' : `<div class="dom-meta"><span>Accuracy <strong class="num">${d.seen ? Math.round(d.accuracy) + '%' : '—'}</strong></span><span>Coverage <strong class="num">${d.seen}/${d.total}</strong></span><span>All-time <strong class="num">${d.answers ? Math.round(d.allTime) + '%' : '—'}</strong></span>
+          <button class="link-btn" data-qc="start" data-mode="domain" data-domain="${esc(d.d)}">Practise ${icon('chevron')}</button></div>`}
+      </div>`;
+    }).join('');
+  }
+  function noBankState() {
+    const c = A.cert;
+    return A.emptyState('book', `No questions for ${c ? c.code : 'this certification'} yet`,
+      'Each certification has its own question bank. Import a bank someone shared, add questions yourself, or download the template to write your own in JSON.',
+      `<button class="btn btn-primary" data-action="import-bank">${icon('upload')} Import question bank</button><button class="btn" data-action="add-question">${icon('plus')} Add a question</button><button class="btn btn-ghost" data-action="bank-template">${icon('download')} Template</button>`);
   }
 
+  // ---------------------------------------------------------------
+  // Quiz Centre view
+  // ---------------------------------------------------------------
   let showAllHistory = false;
   function renderQuizView(o) {
     const el = document.getElementById('view-quiz');
+    const c = A.cert;
+    if (!c) { el.innerHTML = `<div class="panel">${A.emptyState('cert', 'No active certification', 'Choose a certification to open its Quiz Centre.', `<button class="btn btn-primary" data-action="goto" data-view="certs">My Certifications</button>`)}</div>`; return; }
+    if (!QS.length) { el.innerHTML = `<div class="panel">${noBankState()}</div>`; return; }
     const q = qs();
     const st = overallStats();
     const rd = readiness();
@@ -711,121 +832,122 @@
     const dailyDone = q.daily[todayISO()];
     const streak = dailyStreak();
     const hist = q.attempts.slice().reverse();
-    const shown = showAllHistory ? hist : hist.slice(0, 5);
+    const shown = showAllHistory ? hist : hist.slice(0, 6);
+    const M = mastery();
+    const wt = weakTopics();
+    const modeTile = (k, extra = '', locked = false, lockMsg = '') => {
+      const m = MODES[k];
+      return `<button class="mode-tile ${locked ? 'locked' : ''}" data-qc="${locked ? 'locked' : 'start'}" data-mode="${k}" ${lockMsg ? `data-msg="${esc(lockMsg)}"` : ''}>
+        <span class="mt-ic">${icon(locked ? 'x' : m.icon)}</span><span class="mt-t">${m.title}</span><span class="mt-d">${locked ? esc(lockMsg) : m.desc}${extra}</span></button>`;
+    };
 
     el.innerHTML = `
-      ${q.active ? `<div class="card qx-resume">
-        <div>${icon('clock')}</div>
-        <div style="flex:1;min-width:0"><strong>${esc(q.active.title)}</strong><div class="small muted">In progress · question ${q.active.idx + 1} of ${q.active.items.length}${q.active.limitSec ? ` · ${fmtMS(remainingSec(q.active))} left` : ''}</div></div>
-        <button class="btn btn-sm btn-primary" data-qc="resume">Resume</button>
-      </div>` : ''}
+      ${q.active && activeOk() ? `<div class="banner">${icon('clock')}
+        <div class="txt"><strong>${esc(q.active.title)}</strong>In progress · question ${q.active.idx + 1} of ${q.active.items.length}${q.active.limitSec ? ` · ${fmtMS(remainingSec(q.active))} left` : ''}</div>
+        <button class="btn btn-sm btn-primary" data-qc="resume">Resume</button></div>` : ''}
+      <div class="qc-grid">
+        <section class="panel qc-hero span-2">
+          <div class="ring-wrap">${A.ring(rd.score, 124, 11, 'qcGrad')}<div class="ring-label"><span class="ring-value num">${Math.round(rd.score)}%</span><span class="ring-caption">mastery</span></div></div>
+          <div class="qc-hero-text">
+            <div class="eyebrow">${esc(c.code)} Quiz Centre</div>
+            <h2>${rd.ready ? 'Certification prep complete' : `${rd.masteredCount} of ${ds.length} domains mastered`}</h2>
+            <p class="muted">${rd.ready ? `Every domain is at or above ${M}% mastery. Book the exam and keep the daily challenge going.` : `Every domain needs ${M}% mastery before prep counts as complete. The score is weighted by the exam domains.`}</p>
+            <div class="stat-row">
+              <div class="mini-stat"><div class="k">Questions</div><div class="v num">${st.total}</div><div class="s">${st.unique} answered</div></div>
+              <div class="mini-stat"><div class="k">Accuracy</div><div class="v num">${st.answers ? Math.round(st.accuracy) + '%' : '—'}</div><div class="s">${st.answers} answers</div></div>
+              <div class="mini-stat"><div class="k">Average</div><div class="v num">${st.quizzes ? Math.round(st.avgScore) + '%' : '—'}</div><div class="s">${A.plural(st.quizzes, 'quiz', 'quizzes')}</div></div>
+              <div class="mini-stat"><div class="k">Daily streak</div><div class="v num">${streak}</div><div class="s">${dailyDone ? `Today ${Math.round(dailyDone.pct)}%` : 'Today pending'}</div></div>
+            </div>
+          </div>
+        </section>
 
-      <div class="card hero">
-        <div class="ring-wrap">${A.ring(rd.score, 112, 10, 'qcGrad')}<div class="ring-label"><span class="ring-value num">${Math.round(rd.score)}%</span><span class="ring-caption">readiness</span></div></div>
-        <div class="hero-text">
-          <div class="phase" style="${rd.ready ? 'color:var(--teal)' : ''}">${rd.ready ? 'Certification prep complete' : `${rd.masteredCount} of 3 domains mastered`}</div>
-          <p class="motivation">${rd.ready ? 'All three domains are at or above 85% mastery. Book the exam and keep doing the daily challenge.' : `Every domain needs ${MASTERY}% mastery before prep counts as complete. Weighted by the official exam domains.`}</p>
-        </div>
+        <section class="panel qc-next">
+          <div class="panel-head"><h3>Recommended next</h3></div>
+          ${rec ? `<div class="rec-title">${esc(rec.title)}</div><p class="small muted">${esc(rec.why)}</p>
+          <button class="btn btn-primary btn-block" data-qc="rec" data-a="${rec.action}" data-week="${rec.week || ''}" data-domain="${esc(rec.domain || '')}">${icon('play')} Start</button>` : ''}
+          <div class="daily-row">
+            <div class="daily-ic ${dailyDone ? 'done' : ''}">${icon(dailyDone ? 'check' : 'flame')}</div>
+            <div style="flex:1;min-width:0"><strong>${dailyDone ? `Daily done · ${Math.round(dailyDone.pct)}%` : 'Daily challenge'}</strong><div class="tiny muted">${streak ? `${streak}-day streak` : 'Start a streak today'} · new set daily</div></div>
+            <button class="btn btn-sm ${dailyDone ? '' : 'btn-teal'}" data-qc="start" data-mode="daily">${dailyDone ? 'Retake' : 'Start'}</button>
+          </div>
+          ${ctx.weekRecs.length > 1 ? `<div class="tiny muted" style="margin-top:10px">Also pending: ${ctx.weekRecs.slice(1).map((w) => `<button class="link-btn" data-qc="start" data-mode="week" data-week="${w}">Week ${w} revision</button>`).join(' ')}</div>` : ''}
+        </section>
+
+        <section class="panel span-3">
+          <div class="panel-head"><h3>Quiz modes</h3><span class="tiny muted">${esc(c.code)} questions only</span></div>
+          <div class="mode-grid">
+            ${modeTile('quick')}${modeTile('standard')}${modeTile('mock')}${modeTile('domain')}
+            ${modeTile('weak', ` · ${weakPool().length} available`)}${modeTile('flagged', ` · ${q.flagged.length} saved`)}${modeTile('daily')}
+            ${hasWeekQuizzes() ? modeTile('week', '', false) : ''}
+            ${modeTile('final', '', !ctx.finalUnlocked, `Unlocks at the end of Week ${o ? o.W : ''} of your study programme`)}
+          </div>
+        </section>
+
+        <section class="panel span-2">
+          <div class="panel-head"><h3>Domain mastery</h3><span class="tiny muted">Target ${M}%</span></div>
+          ${strongest || weakest ? `<div class="sw-row">
+            ${strongest ? `<span><span class="k">Strongest</span> ${esc(domShort(strongest.d))} <span class="num muted">${Math.round(strongest.accuracy)}%</span></span>` : ''}
+            ${weakest && weakest.d !== (strongest && strongest.d) ? `<span><span class="k">Weakest</span> ${esc(domShort(weakest.d))} <span class="num muted">${Math.round(weakest.accuracy)}%</span></span>` : ''}
+          </div>` : ''}
+          <div class="dom-list">${domainRows(ds)}</div>
+          <div class="tiny muted" style="margin-top:10px">Mastery is your latest-answer accuracy, scaled down until you've answered at least ${Math.round(minCoverage() * 100)}% of a domain's questions.</div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><h3>Topics to revise</h3></div>
+          ${wt.length ? wt.map((t) => { const ref = refOf(t); return `<div class="qx-rec"><div style="min-width:0"><div class="t">${esc(t.topic)}</div><div class="tiny muted">${t.obj ? `${esc(t.obj)} · ` : ''}${t.c}/${t.n} correct on latest attempt</div></div>
+            <div class="row-actions">${A.ext.revision ? A.ext.revision.topicBookmarkBtn(t.topic) : ''}${ref ? `<a class="mini-btn" href="${esc(ref.url)}" target="_blank" rel="noopener" aria-label="Open reference">${icon('external')}</a>` : ''}</div></div>`; }).join('')
+            : '<div class="small muted">Weak topics appear here once you have quiz results below your target.</div>'}
+        </section>
+
+        <section class="panel span-2">
+          <div class="panel-head"><h3>Performance over time</h3></div>
+          <div class="chart-wrap">${historyChart(q.attempts)}</div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><h3>Recent results</h3>${hist.length > 6 ? `<button class="link-btn" data-qc="hist">${showAllHistory ? 'Show fewer' : `All (${hist.length})`}</button>` : ''}</div>
+          ${shown.length ? `<div class="list-gap">${shown.map((t) => `<button class="quiz-item" data-qc="result" data-id="${t.id}">
+            <div class="score ${t.pct >= M ? 'pass' : 'fail'} num">${Math.round(t.pct)}%</div>
+            <div class="body"><div class="name">${esc(t.title)}</div><div class="meta">${A.fmtDate(t.date.slice(0, 10))} · ${t.correct}/${t.total} · ${fmtDur(t.durationSec)} · ${t.exam ? 'Exam' : 'Practice'}</div></div>
+            ${icon('chevron', 'muted')}</button>`).join('')}</div>` : '<div class="small muted">No quizzes yet. Start with the daily challenge or a Quick Quiz.</div>'}
+        </section>
       </div>
 
-      <div class="stat-grid qx-stats">
-        <div class="card stat"><div class="stat-top">${icon('book')} Question bank</div><div class="stat-value num">${st.total}</div><div class="stat-foot">${st.unique} answered at least once</div></div>
-        <div class="card stat"><div class="stat-top">${icon('check')} Accuracy</div><div class="stat-value num">${st.answers ? Math.round(st.accuracy) + '%' : '—'}</div><div class="stat-foot">${st.answers} answers in total</div></div>
-        <div class="card stat"><div class="stat-top">${icon('target')} Average score</div><div class="stat-value num">${st.quizzes ? Math.round(st.avgScore) + '%' : '—'}</div><div class="stat-foot">${st.quizzes} quiz${st.quizzes === 1 ? '' : 'zes'} completed</div></div>
-        <div class="card stat flame"><div class="stat-top">${icon('flame')} Daily streak</div><div class="stat-value num">${streak}<small>day${streak === 1 ? '' : 's'}</small></div><div class="stat-foot">${dailyDone ? `Today: ${Math.round(dailyDone.pct)}%` : 'Today\'s challenge pending'}</div></div>
-      </div>
-      ${strongest || weakest ? `<div class="card qx-sw">
-        ${strongest ? `<div><span class="k">Strongest</span><span class="v">Domain ${strongest.d} · ${esc(B.domains[strongest.d - 1].short)}</span><span class="num muted">${Math.round(strongest.accuracy)}%</span></div>` : ''}
-        ${weakest && weakest.d !== (strongest && strongest.d) ? `<div><span class="k">Weakest</span><span class="v">Domain ${weakest.d} · ${esc(B.domains[weakest.d - 1].short)}</span><span class="num muted">${Math.round(weakest.accuracy)}%</span></div>` : ''}
-      </div>` : ''}
-
-      <div class="section-title">Recommended next</div>
-      <div class="card qx-rec-card">
-        <div class="qx-rec-title">${esc(rec.title)}</div>
-        <div class="small muted" style="margin-top:4px">${esc(rec.why)}</div>
-        <button class="btn btn-primary btn-block" style="margin-top:14px" data-qc="rec" data-a="${rec.action}" data-week="${rec.week || ''}" data-domain="${rec.domain || ''}">${icon('play')} Start</button>
-      </div>
-
-      ${ctx.weekRecs.length > 1 ? `<div class="card" style="margin-top:12px"><div class="small muted">Also pending: ${ctx.weekRecs.slice(1).map((w) => `<button class="link-btn" data-qc="start" data-mode="week" data-week="${w}">Week ${w} revision</button>`).join(' ')}</div></div>` : ''}
-
-      <div class="section-title">Daily challenge</div>
-      <div class="card qx-daily">
-        <div class="qx-daily-ic ${dailyDone ? 'done' : ''}">${icon(dailyDone ? 'check' : 'flame')}</div>
-        <div style="flex:1;min-width:0"><strong>${dailyDone ? `Done today · ${Math.round(dailyDone.pct)}%` : '5 questions for today'}</strong><div class="small muted">${streak ? `${streak}-day streak` : 'Start a streak today'} · a new set every day</div></div>
-        <button class="btn btn-sm ${dailyDone ? '' : 'btn-teal'}" data-qc="start" data-mode="daily">${dailyDone ? 'Retake' : 'Start'}</button>
-      </div>
-
-      <div class="section-title">Exam domains <span class="tiny" style="text-transform:none;letter-spacing:0">Target ${MASTERY}%</span></div>
-      ${ds.map((d) => `<div class="card qx-domain">
-        <div class="qx-dhead"><div><div class="wc-kicker">Domain ${d.d} · ${B.domains[d.d - 1].weight[0]}–${B.domains[d.d - 1].weight[1]}% of exam</div><div class="wc-title">${esc(B.domains[d.d - 1].title)}</div></div>
-          ${d.mastered ? `<span class="chip teal">${icon('check')}Mastered</span>` : ''}</div>
-        <div class="qx-mrow2"><span class="small muted">Mastery</span><span class="num"><strong>${Math.round(d.mastery)}%</strong></span></div>
-        ${masteryBar(d.mastery)}
-        <div class="wc-stats">
-          <div class="wc-stat"><div class="k">Accuracy</div><div class="v num">${d.seen ? Math.round(d.accuracy) + '%' : '—'}</div></div>
-          <div class="wc-stat"><div class="k">Coverage</div><div class="v num">${d.seen}/${d.total}</div></div>
-          <div class="wc-stat"><div class="k">All-time</div><div class="v num">${d.answers ? Math.round(d.allTime) + '%' : '—'}</div></div>
-        </div>
-        <button class="btn btn-sm btn-block" style="margin-top:10px" data-qc="start" data-mode="domain" data-domain="${d.d}">Practise domain ${d.d}</button>
-      </div>`).join('')}
-      <div class="tiny muted" style="margin:8px 4px 0">Mastery is your latest-answer accuracy, scaled down until you've answered at least ${Math.round(MIN_COVERAGE * 100)}% of the domain's questions.</div>
-
-      <div class="section-title">Quiz modes</div>
-      <div class="qx-modes">
-        ${['quick', 'standard', 'mock', 'domain', 'weak', 'flagged'].map((k) => {
-          const m = MODES[k];
-          const extra = k === 'weak' ? ` · ${weakPool().length} available` : k === 'flagged' ? ` · ${q.flagged.length} flagged` : '';
-          return `<button class="card qx-mode" data-qc="start" data-mode="${k}"><div class="qx-mode-ic">${icon(m.icon)}</div><div class="t">${m.title}</div><div class="d">${m.desc}${extra}</div></button>`;
-        }).join('')}
-        <button class="card qx-mode ${ctx.finalUnlocked ? '' : 'locked'}" data-qc="${ctx.finalUnlocked ? 'start' : 'locked'}" data-mode="final">
-          <div class="qx-mode-ic">${icon(ctx.finalUnlocked ? 'trophy' : 'x')}</div><div class="t">Final Mock Assessment</div>
-          <div class="d">${ctx.finalUnlocked ? MODES.final.desc : 'Unlocks at the end of Week 4 of your study programme'}</div></button>
-      </div>
-
-      <div class="section-title">Performance over time</div>
-      <div class="card"><div class="chart-wrap">${historyChart(q.attempts)}</div></div>
-
-      <div class="section-title">Recent results ${hist.length > 5 ? `<button class="link-btn" data-qc="hist">${showAllHistory ? 'Show fewer' : `Show all (${hist.length})`}</button>` : ''}</div>
-      ${shown.length ? shown.map((t) => `<button class="quiz-item" data-qc="result" data-id="${t.id}">
-        <div class="score ${t.pct >= MASTERY ? 'pass' : 'fail'} num">${Math.round(t.pct)}%</div>
-        <div class="body"><div class="name">${esc(t.title)}</div><div class="meta">${A.fmtDate(t.date.slice(0, 10))} · ${t.correct}/${t.total} · ${fmtDur(t.durationSec)} · ${t.exam ? 'Exam' : 'Practice'}</div></div>
-        ${icon('chevron', 'muted')}</button>`).join('') : '<div class="card empty">No quizzes yet. Start with the daily challenge or a Quick Quiz.</div>'}
-
-      ${weakTopics().length ? `<div class="section-title">Topics to revise</div>
-      <div class="card">${weakTopics().map((t) => { const ref = B.refs[t.ref]; return `<div class="qx-rec"><div><div class="t">${esc(t.topic)}</div><div class="tiny muted">${esc(t.obj)} · ${t.c}/${t.n} correct on latest attempt</div></div>${ref ? `<a class="mini-btn" href="${esc(ref[0])}" target="_blank" rel="noopener" aria-label="Open Microsoft Learn">${icon('external')}</a>` : ''}</div>`; }).join('')}</div>` : ''}
-
-      <div class="card qx-disclaimer">
-        ${icon('book')}
-        <div class="small">These are <strong>original practice questions</strong> written against the official AB-650 skills outline. They aren't Microsoft exam questions. New AI and agent features change often, so always check the linked Microsoft Learn page.
-        <a href="${esc(B.studyGuideUrl)}" target="_blank" rel="noopener">Official study guide</a></div>
+      <div class="disclaimer">${icon('info')}
+        <div class="small">${esc(X().disclaimer || 'Practice questions are study aids, not official exam content. Always check the linked references.')}
+        ${c.studyGuideUrl ? ` <a href="${esc(c.studyGuideUrl)}" target="_blank" rel="noopener">Official study guide</a>` : ''}</div>
       </div>`;
   }
 
   function startSheet(mode, preset = {}) {
+    if (!QS.length) { toast(`There are no questions in the ${A.cert ? A.cert.code : ''} bank yet.`, { icon: 'x' }); return; }
     const m = MODES[mode];
     const p = qs().prefs;
     const exam = m.examOnly ? true : m.practiceOnly ? false : (preset.exam != null ? preset.exam : p.exam);
     const diff = preset.diff || p.diff || 'all';
-    const domain = preset.domain || p.domain || 1;
+    let domain = preset.domain != null ? String(preset.domain) : p.domain != null ? String(p.domain) : firstDomain();
+    if (!domById(domain) || !domIds().includes(domain)) domain = firstDomain();
     const showDiff = ['quick', 'standard', 'domain', 'weak'].includes(mode);
     const poolCount = () => {
       if (mode === 'domain') return diffFilter(QS.filter((q) => domOf(q) === domain), diff).length;
       if (mode === 'weak') return diffFilter(weakPool(), diff).length;
       if (mode === 'flagged') return qs().flagged.length;
-      if (mode === 'week') return QS.filter((q) => WEEK_SECTIONS[preset.week].includes(q.obj.slice(0, 3))).length;
+      if (mode === 'week') return weekPool(preset.week).length;
       if (mode === 'mock' || mode === 'final' || mode === 'daily') return QS.length;
       return diffFilter(QS, diff).length;
     };
     const avail = poolCount();
     const n = Math.min(m.count, avail);
     const title = mode === 'week' ? `Week ${preset.week} revision assessment` : m.title;
-    const desc = mode === 'week' ? `Questions on this week's topics: ${WEEK_SECTIONS[preset.week].map((s) => B.sections[s]).join('; ')}.` : m.desc;
+    const secs = mode === 'week' ? weekSections(preset.week) || [] : [];
+    const desc = mode === 'week' ? `Questions on this week's topics: ${secs.map((s) => X().sections[s] || s).join('; ')}.` : m.desc;
     A.openSheet(`
-      <div class="sheet-title"><div><div class="eyebrow">Quiz Centre</div><h2>${esc(title)}</h2></div>
+      <div class="sheet-title"><div><div class="eyebrow">${esc(A.cert.code)} · Quiz Centre</div><h2>${esc(title)}</h2></div>
         <button class="icon-btn" data-action="close-sheet" aria-label="Close">${icon('x')}</button></div>
       <p class="small muted" style="margin:0">${esc(desc)}</p>
-      ${mode === 'domain' ? `<div class="field"><span class="label">Exam domain</span><div class="qx-seg3">${[1, 2, 3].map((d) => `<button class="${d === domain ? 'active' : ''}" data-qc="sopt" data-k="domain" data-v="${d}"><strong>Domain ${d}</strong><span>${esc(B.domains[d - 1].short)}</span></button>`).join('')}</div></div>` : ''}
-      ${m.examOnly || m.practiceOnly ? `<div class="callout info">${m.examOnly ? `Exam mode: timed (${fmtDur(m.minutes * 60)}), and answers are revealed only after you submit. Weighted by the official domain percentages.` : 'Practice mode: you see the answer and explanation straight after each question.'}</div>` : `
+      ${mode === 'domain' ? `<div class="field"><span class="label">Exam domain</span><div class="qx-seg3" style="--n:${Math.min(DOMS.length, 3)}">${DOMS.map((d) => `<button class="${d.id === domain ? 'active' : ''}" data-qc="sopt" data-k="domain" data-v="${esc(d.id)}"><strong>${esc(domLabel(d.id))}</strong><span>${esc(d.short)}</span></button>`).join('')}</div></div>` : ''}
+      ${m.examOnly || m.practiceOnly ? `<div class="callout info">${m.examOnly ? `Exam mode: timed (${fmtDur(m.minutes * 60)}), and answers are revealed only after you submit. Weighted by the exam domain percentages.` : 'Practice mode: you see the answer and explanation straight after each question.'}</div>` : `
       <div class="field"><span class="label">Mode</span><div class="mini-seg qx-seg2">
         <button class="${!exam ? 'active' : ''}" data-qc="sopt" data-k="exam" data-v="0">Practice<span>Instant feedback</span></button>
         <button class="${exam ? 'active' : ''}" data-qc="sopt" data-k="exam" data-v="1">Exam<span>Timed · answers at end</span></button>
@@ -834,7 +956,7 @@
       <div class="score-preview"><div><div class="small muted">Questions</div><div class="big num">${n}</div></div>
         <div style="text-align:right"><div class="small muted">${exam && m.minutes ? 'Time limit' : 'Suggested time'}</div><div class="big num">${m.minutes ? fmtDur(Math.round((m.minutes * Math.max(n, 1)) / m.count) * 60) : '~5 min'}</div></div></div>
       ${n < m.count && avail > 0 ? `<div class="tiny muted" style="margin-top:8px">Only ${avail} question${avail === 1 ? '' : 's'} match, so the quiz is shorter.</div>` : ''}
-      <button class="btn btn-primary btn-block" style="margin-top:18px" data-qc="go" data-mode="${mode}" data-week="${preset.week || ''}" data-exam="${exam ? 1 : 0}" data-diff="${diff}" data-domain="${domain}" ${n ? '' : 'disabled'}>${icon('play')} Start ${exam ? 'exam' : 'quiz'}</button>`);
+      <button class="btn btn-primary btn-block" style="margin-top:18px" data-qc="go" data-mode="${mode}" data-week="${preset.week || ''}" data-exam="${exam ? 1 : 0}" data-diff="${diff}" data-domain="${esc(domain || '')}" ${n ? '' : 'disabled'}>${icon('play')} Start ${exam ? 'exam' : 'quiz'}</button>`);
     startSheet.ctx = { mode, preset: { ...preset, exam, diff, domain } };
   }
 
@@ -846,18 +968,18 @@
     if (k === 'resume') { openPlayer(); return; }
     if (k === 'hist') { showAllHistory = !showAllHistory; A.renderCurrent(); return; }
     if (k === 'result') { showResults(el.dataset.id); return; }
-    if (k === 'locked') { toast('The Final Mock Assessment unlocks at the end of Week 4.', { icon: 'calendar' }); return; }
+    if (k === 'locked') { toast(el.dataset.msg || 'This mode is locked for now.', { icon: 'calendar' }); return; }
     if (k === 'start') {
       const mode = el.dataset.mode;
-      if (qs().active) { toast('Finish or resume your current quiz first.', { icon: 'clock', action: 'Resume', onAction: openPlayer }); return; }
-      startSheet(mode, { week: Number(el.dataset.week) || undefined, domain: Number(el.dataset.domain) || undefined });
+      if (activeOk()) { toast('Finish or resume your current quiz first.', { icon: 'clock', action: 'Resume', onAction: openPlayer }); return; }
+      startSheet(mode, { week: Number(el.dataset.week) || undefined, domain: el.dataset.domain || undefined });
       return;
     }
     if (k === 'rec') {
       const a = el.dataset.a;
       if (a === 'resume') { openPlayer(); return; }
       if (a === 'week') { startSheet('week', { week: Number(el.dataset.week) }); return; }
-      if (a === 'domain') { startSheet('domain', { domain: Number(el.dataset.domain) }); return; }
+      if (a === 'domain') { startSheet('domain', { domain: el.dataset.domain }); return; }
       startSheet(a);
       return;
     }
@@ -865,19 +987,16 @@
       const c = startSheet.ctx;
       if (!c) return;
       const v = el.dataset.v;
-      if (el.dataset.k === 'exam') c.preset.exam = v === '1';
-      if (el.dataset.k === 'diff') c.preset.diff = v;
-      if (el.dataset.k === 'domain') c.preset.domain = Number(v);
       const p = qs().prefs;
-      if (el.dataset.k === 'exam') p.exam = v === '1';
-      if (el.dataset.k === 'diff') p.diff = v;
-      if (el.dataset.k === 'domain') p.domain = Number(v);
+      if (el.dataset.k === 'exam') { c.preset.exam = v === '1'; p.exam = v === '1'; }
+      if (el.dataset.k === 'diff') { c.preset.diff = v; p.diff = v; }
+      if (el.dataset.k === 'domain') { c.preset.domain = v; p.domain = v; }
       A.save();
       startSheet(c.mode, c.preset);
       return;
     }
     if (k === 'go') {
-      startSession({ mode: el.dataset.mode, exam: el.dataset.exam === '1', diff: el.dataset.diff, domain: Number(el.dataset.domain) || 1, week: Number(el.dataset.week) || null });
+      startSession({ mode: el.dataset.mode, exam: el.dataset.exam === '1', diff: el.dataset.diff, domain: el.dataset.domain || firstDomain(), week: Number(el.dataset.week) || null });
     }
   });
 
@@ -885,43 +1004,96 @@
   // Register with the app
   // ---------------------------------------------------------------
   A.registerView('quiz', {
-    label: 'Quiz Centre', short: 'Quiz', icon: 'target', render: renderQuizView,
-    eyebrow: () => 'AB-650 exam preparation',
+    label: 'Quiz Centre', short: 'Quiz', icon: 'target', scope: 'cert', order: 40, render: renderQuizView,
+    eyebrow: () => (A.cert ? `${A.cert.code} exam preparation` : 'Quiz Centre'),
   });
 
-  A.hooks.dashboard.push((o) => {
-    const rd = readiness();
-    const dailyDone = qs().daily[todayISO()];
-    const rec = recommendation(o);
-    return `<div class="section-title">AB-650 exam readiness <span class="tiny" style="text-transform:none;letter-spacing:0">${rd.masteredCount}/3 mastered</span></div>
-      <div class="card qx-dash">
-        ${rd.ds.map((d) => `<div class="qx-dash-row"><span class="label">D${d.d} <span class="muted">${esc(B.domains[d.d - 1].short)}</span></span><span class="num small">${Math.round(d.mastery)}%</span></div>${masteryBar(d.mastery)}`).join('')}
-        <div class="small muted" style="margin-top:10px">Next: ${esc(rec.title)}</div>
+  // Home: exam readiness panel (side column) and study recommendations (main column)
+  A.hooks.home.push({
+    slot: 'side', order: 1,
+    render: (o) => {
+      if (!QS.length) return `<section class="panel"><div class="panel-head"><h3>Exam preparation</h3></div>${noBankState()}</section>`;
+      const rd = readiness();
+      const dailyDone = qs().daily[todayISO()];
+      const rec = recommendation(o);
+      return `<section class="panel">
+        <div class="panel-head"><h3>Domain mastery</h3><span class="tiny muted">${rd.masteredCount}/${rd.ds.length} mastered</span></div>
+        <div class="dom-list">${domainRows(rd.ds, { compact: true })}</div>
+        ${rec ? `<div class="small muted" style="margin-top:12px">Next: ${esc(rec.title)}</div>` : ''}
         <div class="btn-row" style="margin-top:12px">
           <button class="btn btn-sm ${dailyDone ? '' : 'btn-teal'}" data-qc="start" data-mode="daily">${icon(dailyDone ? 'check' : 'flame')} ${dailyDone ? 'Daily done' : 'Daily challenge'}</button>
           <button class="btn btn-sm" data-nav="quiz">${icon('target')} Quiz Centre</button>
         </div>
-      </div>`;
+      </section>`;
+    },
+  });
+  A.hooks.home.push({
+    slot: 'main', order: 5,
+    render: () => {
+      if (!QS.length) return '';
+      const recs = studyRecommendations(3);
+      if (!recs.length) return '';
+      return `<section class="panel">
+        <div class="panel-head"><h3>Study recommendations</h3><span class="tiny muted">From your saved quiz results</span></div>
+        <ul class="rec-list">${recs.map((r) => `<li>${icon(r.kind === 'topic' ? 'sparkle' : 'target')}<div><p>${esc(r.text)}</p>
+          <div class="btn-row">${r.kind === 'domain' ? `<button class="btn btn-sm" data-qc="start" data-mode="domain" data-domain="${esc(r.domain)}">Domain quiz</button>` : `<button class="btn btn-sm" data-qc="start" data-mode="weak">Weak Areas quiz</button>`}
+          ${r.ref ? `<a class="btn btn-sm btn-ghost" href="${esc(r.ref.url)}" target="_blank" rel="noopener">${icon('external')} ${esc(r.ref.title)}</a>` : ''}</div></div></li>`).join('')}</ul>
+      </section>`;
+    },
+  });
+  // Analytics: quiz performance
+  A.hooks.analytics.push({
+    slot: 'main', order: 10,
+    render: () => {
+      if (!QS.length) return '';
+      const st = overallStats();
+      const rd = readiness();
+      const q = qs();
+      return `<section class="panel span-2">
+        <div class="panel-head"><h3>Quiz Centre performance</h3><button class="link-btn" data-nav="quiz">Open Quiz Centre ${icon('chevron')}</button></div>
+        <div class="stat-row">
+          <div class="mini-stat"><div class="k">Quizzes</div><div class="v num">${st.quizzes}</div></div>
+          <div class="mini-stat"><div class="k">Average</div><div class="v num">${st.quizzes ? Math.round(st.avgScore) + '%' : '—'}</div></div>
+          <div class="mini-stat"><div class="k">Accuracy</div><div class="v num">${st.answers ? Math.round(st.accuracy) + '%' : '—'}</div></div>
+          <div class="mini-stat"><div class="k">Coverage</div><div class="v num">${st.unique}/${st.total}</div></div>
+        </div>
+        <div class="chart-wrap">${historyChart(q.attempts)}</div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h3>Domain mastery</h3><span class="tiny muted">${rd.masteredCount}/${rd.ds.length}</span></div>
+        <div class="dom-list">${domainRows(rd.ds, { compact: true })}</div>
+      </section>`;
+    },
+  });
+  // Study plan: week revision quiz shortcut
+  A.hooks.planWeek.push({
+    slot: 'main',
+    render: ({ week }) => (weekPool(week).length ? `<button class="btn btn-sm btn-block" style="margin-top:12px" data-qc="start" data-mode="week" data-week="${week}">${icon('target')} Week ${week} revision quiz${qs().weekBest[week] != null ? ` · best ${Math.round(qs().weekBest[week])}%` : ''}</button>` : ''),
   });
 
-  A.hooks.load.push(() => { qs(); });
+  A.hooks.certChange.push(() => { rebuild(); if (P.el && !P.el.hidden) closePlayer(true); qs(); });
+  A.hooks.bankChange.push((id) => { if (A.cert && A.cert.id === id) { rebuild(); qs(); } });
+  A.hooks.load.push(() => { rebuild(); qs(); });
   A.hooks.reset.push((state) => { delete state.quiz; qs(); });
   A.hooks.ready.push(() => {
-    // Player controls live in #quiz-player; the question navigator lives in the shared bottom sheet.
     document.addEventListener('click', (e) => { if (e.target.closest('#quiz-player, #sheet-body')) onPlayerClick(e); });
     document.addEventListener('change', (e) => { if (e.target.closest('#quiz-player')) onPlayerChange(e); });
     const s = qs().active;
-    if (s && s.limitSec && remainingSec(s) <= 0) {
-      // Timer expired while the app was closed: submit automatically
+    if (s && activeOk() && s.limitSec && remainingSec(s) <= 0) {
       setTimeout(() => { toast('Your exam timer ran out while the app was closed. It has been submitted.', { icon: 'clock', ms: 5000 }); finishSession('timeout'); }, 300);
     }
   });
 
   A.addAchievement({ id: 'qc-first', t: 'First practice quiz', d: 'Complete a Quiz Centre quiz', icon: 'target', test: () => qs().attempts.length >= 1 });
   A.addAchievement({ id: 'qc-daily7', t: '7-day quiz streak', d: 'Daily challenge 7 days running', icon: 'flame', test: () => dailyStreak() >= 7 });
-  A.addAchievement({ id: 'qc-mock85', t: 'Mock exam at 85%+', d: 'Score 85% or more on a full mock', icon: 'trophy', test: () => qs().attempts.some((t) => (t.mode === 'mock' || t.mode === 'final') && t.pct >= MASTERY) });
-  A.addAchievement({ id: 'qc-ready', t: 'AB-650 ready', d: 'All three domains at 85% mastery', icon: 'star', test: () => readiness().ready });
+  A.addAchievement({ id: 'qc-mock85', get t() { return `Mock exam at ${mastery()}%+`; }, get d() { return `Score ${mastery()}% or more on a full mock`; }, icon: 'trophy', test: () => qs().attempts.some((t) => (t.mode === 'mock' || t.mode === 'final') && t.pct >= mastery()) });
+  A.addAchievement({ id: 'qc-ready', get t() { return `${A.cert ? A.cert.code : 'Exam'} ready`; }, get d() { return `Every domain at ${mastery()}% mastery`; }, icon: 'star', test: () => readiness().ready });
 
+  A.ext.quiz = {
+    get QS() { return QS; }, get QMAP() { return QMAP; },
+    qs, readiness, overallStats, recentAssessment, allDomainStats, weakTopics, studyRecommendations, recommendation,
+    startSheet, toggleBookmark, chipRow, optionsHTML, explanationHTML, domLabel, domShort, refOf, refLabel, rebuild,
+  };
   // Testing hook
-  window.__quizCentre = { qs, readiness, allDomainStats, isCorrect, isAnswered, selectQuestions, weightedCounts, startSession, finishSession, recommendation, programmeContext, QMAP };
+  window.__quizCentre = { qs, readiness, allDomainStats, isCorrect, isAnswered, selectQuestions, weightedCounts, startSession, finishSession, recommendation, programmeContext, studyRecommendations, get QMAP() { return QMAP; }, get QS() { return QS; }, rebuild };
 })();

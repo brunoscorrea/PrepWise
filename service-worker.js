@@ -1,17 +1,23 @@
-/* Offline-first service worker for M365 Study Tracker.
-   Bump CACHE_VERSION whenever you change any app file so phones pick up the update. */
-const CACHE_VERSION = 'v1.1.0';
-const CACHE_NAME = `m365-study-tracker-${CACHE_VERSION}`;
+/* Offline-first service worker for PrepWise.
+   Bump CACHE_VERSION whenever you change any app file so installed apps pick up the update. */
+const CACHE_VERSION = 'v2.0.0';
+const CACHE_PREFIX = 'prepwise-';
+const LEGACY_PREFIX = 'm365-study-tracker-'; // v1 caches, removed on activate
+const CACHE_NAME = `${CACHE_PREFIX}${CACHE_VERSION}`;
 const APP_SHELL = [
   './',
   './index.html',
   './styles.css',
   './app.js',
   './quiz-centre.js',
-  './ab650/meta.js',
-  './ab650/questions-d1.js',
-  './ab650/questions-d2.js',
-  './ab650/questions-d3.js',
+  './js/schema.js',
+  './js/certs.js',
+  './js/revision.js',
+  './certifications/ab-650/meta.js',
+  './certifications/ab-650/questions-d1.js',
+  './certifications/ab-650/questions-d2.js',
+  './certifications/ab-650/questions-d3.js',
+  './certifications/ab-650/profile.js',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
@@ -25,7 +31,9 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('m365-study-tracker-') && k !== CACHE_NAME).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys
+        .filter((k) => (k.startsWith(CACHE_PREFIX) && k !== CACHE_NAME) || k.startsWith(LEGACY_PREFIX))
+        .map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -38,7 +46,7 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  if (url.origin !== self.location.origin) return; // never touch Udemy or other sites
+  if (url.origin !== self.location.origin) return; // never touch course sites or other origins
 
   // Page navigations: serve the cached shell, so the app opens offline.
   if (req.mode === 'navigate') {

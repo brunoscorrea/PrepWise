@@ -1,81 +1,102 @@
-# M365 Study Tracker
+# PrepWise
 
-An offline, installable study tracker (PWA) for a 4-week Microsoft 365 & AI services certification programme. It's built with vanilla JavaScript, HTML and CSS, and has no backend. All data stays on your device in `localStorage`.
+An offline, installable study planner and quiz centre for **any** certification. Each certification is its own profile with its own study plan, learning resources, question bank, quiz history and progress. It's built with vanilla JavaScript, HTML and CSS and has no backend: all data stays on your device.
+
+PrepWise grew out of the *M365 Study Tracker* for Microsoft AB-650. Existing AB-650 data is migrated automatically the first time v2 opens (see [Upgrading from v1](#upgrading-from-v1)).
+
+## Features
+
+- **My Certifications** — a searchable library of certification profiles. Add, edit, duplicate, archive and delete profiles, and switch between them. The active certification is shown in the sidebar (desktop) or top bar (mobile) on every page.
+- **Home** — the dashboard for the active certification: study completion, hours done and remaining, days left, current week, next session, exam preparation, quiz performance, streak, domain mastery and study recommendations.
+- **Study Plan** — week-by-week sessions with a study timer, objectives, lecture checklists, notes and revision status. Any number of weeks (1–52).
+- **Learning Resources** — courses, docs, labs and practice tests for the certification.
+- **Revision & Notes** — notes linked to a certification, study week, topic or exam objective, plus bookmarked questions, topics, resources and notes in one place.
+- **Quiz Centre** — one reusable quiz engine that only ever uses the active certification's question bank: Quick, Standard, Full Mock (weighted by exam domains, timed), Domain, Weak Areas, Bookmarked, Daily Challenge, Week Revision and Final Mock. Practice and exam modes, explanations and reference links.
+- **Progress & Analytics** — a transparent readiness score, hours per week, weekly completion, recorded practice tests, course progress and achievements.
+- **Import / export** — share a certification profile, study plan or question bank with friends without sharing your progress. Full backups and private progress exports are separate. Every import is validated and previewed first.
+- **PWA** — installable on Android, iOS and desktop, and works offline.
+
+The readiness score is calculated from study completion (25%), quiz accuracy (20%), weighted domain mastery (35%) and your last three results with 10+ questions (20%). The breakdown is shown in Analytics. It is not an official prediction of passing.
 
 ## Files
 
 ```
-index.html            App shell
-styles.css            Mobile-first dark theme (tracker + Quiz Centre)
-app.js                Study tracker logic (state, timer, stats, views, import/export, plugin API)
-quiz-centre.js        AB-650 Quiz Centre (modes, exam player, scoring, analytics)
-ab650/meta.js         Exam domains, official objectives and Microsoft Learn references
-ab650/questions-d1.js Domain 1 question bank
-ab650/questions-d2.js Domain 2 question bank
-ab650/questions-d3.js Domain 3 question bank
-manifest.json         PWA manifest (name, icons, standalone display)
-service-worker.js     Offline cache
-icons/                192px, 512px and maskable 512px icons
+index.html                       App shell
+styles.css                       Design system and responsive layout
+app.js                           Store, migration, certification context, Home, Study Plan, Analytics, Settings
+quiz-centre.js                   Reusable quiz engine and Quiz Centre
+js/schema.js                     Versioned file formats, validation and export builders (also runs in Node)
+js/certs.js                      My Certifications, editor, import/export, resources, question manager
+js/revision.js                   Notes, bookmarks, Revision view, readiness score
+certifications/ab-650/           Built-in AB-650 profile: meta.js, questions-d1..3.js, profile.js
+certifications/template-profile.json   A valid example profile to start from
+docs/CERTIFICATION-PROFILES.md   How to create and share profiles; the JSON schema
+service-worker.js                Offline cache
+manifest.json                    PWA manifest
+icons/                           App icons
 ```
 
-## AB-650 Quiz Centre
+## Data storage
 
-The **Quiz** tab is a practice centre for exam AB-650: Administering Microsoft 365 and AI Services. It's organised around the [official study guide](https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/ab-650).
+Everything is in `localStorage` on this device:
 
-- **167 original practice questions** mapped to all 55 objectives in the study guide (skills outline dated 27 July 2026). There are single-answer, multiple-answer, ordering and matching questions, most of them scenario-based, at three difficulty levels.
-- Every question has an explanation, a reason why each wrong option is wrong, the related technology and exam objective, and a Microsoft Learn link.
-- **Modes:** Quick (10), Standard (25), Full Mock Exam (50, weighted 11/21/18 to the official domain percentages, 100-minute timer), Domain, Weak Areas, Flagged, Daily Challenge (5 a day, with a streak), Week revision assessments, and a Final Mock Assessment (60 questions) that unlocks at the end of Week 4.
-- **Practice mode** shows the answer and explanation straight away. **Exam mode** is timed and shows answers only after you submit.
-- Scoring is all-or-nothing per question, like the real exam: a multiple-answer question needs exactly the right set.
-- **Mastery:** a domain counts as mastered at 85% latest-answer accuracy with at least 60% of its questions answered. Certification prep only shows as complete when all three domains are mastered.
+| Key | Contents |
+|---|---|
+| `prepwise:v2` | Application store: settings, certification content, per-certification progress |
+| `prepwise:bank:<id>` | Question bank of a certification created or imported on this device |
+| `prepwise:snapshots` | The last three automatic snapshots, taken before resets, deletes and overwrites |
+| `prepwise:backup:v1` | Untouched copy of the v1 data, made before migration |
+| `m365-study-tracker:v1` | The original v1 data. Never modified or deleted |
 
-**Important:** these are original learning questions, not Microsoft exam questions. Newer features such as Agent 365, Entra Agent ID and Copilot Cowork change often, so always check the linked Learn page.
+All progress is stored under a stable certification ID, so resetting or deleting one certification can't affect another.
 
-### Adding or editing questions
-Add objects to the relevant `ab650/questions-d*.js` file. Each question has `id`, `obj` (study-guide objective such as `2.2.5`), `topic`, `diff` (`easy`/`intermediate`/`advanced`), `type` (`single`/`multi`/`order`/`match`), `scenario`, `q`, `opts` + `ans` (option indexes) or `pairs` (for matching), `exp`, `why` (one reason per option, with an empty string for correct options), `feat` and `ref` (a key in `ab650/meta.js` refs). For `order` questions, list `opts` in the correct order and the app shuffles them. Remember to bump `CACHE_VERSION` in `service-worker.js` afterwards.
+## Upgrading from v1
+
+When v2 opens for the first time on a device that has v1 data, it:
+
+1. copies the v1 data to `prepwise:backup:v1`,
+2. creates the built-in **AB-650** profile with the same 4-week plan and the unchanged 167-question bank,
+3. moves your sessions, logged time, notes, objectives, practice-test results, Udemy progress, Quiz Centre history, statistics and bookmarks into that profile.
+
+The v1 data itself is left in place. You can download it any time from **Settings → Data Management → Download original v1 data**.
+
+One behaviour change: the Quiz Centre now uses your **Exam preparation target score** setting (Settings → Certification Preferences) instead of a fixed 85%. If you changed the v1 "Mastery target", that value now applies to the Quiz Centre too.
 
 ## Run locally
 
-A service worker only works over `http://localhost` or HTTPS. It won't work if you open `index.html` directly from disk.
+A service worker only runs over `http://localhost` or HTTPS, so don't open `index.html` straight from disk.
 
 ```bash
-cd study-tracker
+cd PrepWise
 python3 -m http.server 8000
 # open http://localhost:8000
 ```
 
-## Deploy free with GitHub Pages (recommended)
+## Tests
 
-1. Create a new **public** repository on GitHub, e.g. `study-tracker`.
-2. Upload the contents of this folder to the root of the repository. Use **Add file → Upload files** and drag in everything, including the `icons` folder. You can also push with git:
-   ```bash
-   git init && git add . && git commit -m "Study tracker"
-   git branch -M main
-   git remote add origin https://github.com/<your-username>/study-tracker.git
-   git push -u origin main
-   ```
-3. In the repository, go to **Settings → Pages**. Under *Build and deployment*, choose **Deploy from a branch**, select **main** and **/ (root)**, then click **Save**.
-4. After about a minute, your app is live at `https://<your-username>.github.io/study-tracker/`.
+```bash
+node tests/unit.js           # schema, validation and the AB-650 bank (needs Node 18+)
+```
 
-All paths are relative, so the app works from a sub-folder like this without changes.
+The end-to-end, layout and PWA checks in `tests/` use Python Playwright with Chrome (`pip install playwright`).
 
-### Alternatives
-- **Netlify Drop**: go to app.netlify.com/drop and drag the folder onto the page.
-- **Cloudflare Pages**: create a project, choose *Direct upload* and upload the folder.
+## Deploy
 
-## Install on Android
+The app is static. Upload the folder to any static host (GitHub Pages, Netlify, Cloudflare Pages). All paths are relative.
 
-1. Open your GitHub Pages URL in **Chrome**.
-2. Tap **Install** on the dashboard banner. If the banner doesn't appear, open Chrome's **⋮** menu and tap **Install app** or **Add to Home screen**.
-3. Launch the app from your home screen. It opens full screen and works offline from then on.
+**To keep your existing AB-650 data, deploy to the same origin as v1** (for example, push to the existing `m365-study-tracker` repository on GitHub Pages). Browser storage is per origin, so a different domain starts empty. A different repository under the same `github.io` account shares the origin, so it also finds the v1 data.
 
-## Updating the app after changes
+Whenever you change any file, bump `CACHE_VERSION` in `service-worker.js`. Installed apps then show **A new version is available → Update**.
 
-Whenever you edit any file, change `CACHE_VERSION` in `service-worker.js` (e.g. `v1.0.1`) before you deploy. The next time you open the installed app, it will show **"A new version is available → Update"**. Your study data is not affected by updates.
+## Install
+
+- **Android (Chrome):** tap **Install** on the banner, or ⋮ → **Install app**.
+- **iPhone/iPad (Safari):** Share → **Add to Home Screen**.
+- **Desktop (Chrome/Edge):** the install icon in the address bar.
 
 ## Your data
 
-- Everything saves automatically to this browser on this device. Nothing is sent anywhere.
-- Use **Settings → Export JSON** regularly. Clearing Chrome's site data, or uninstalling the app, deletes your progress.
-- To move to a new phone, export on the old phone and use **Import JSON** on the new one.
-- The app never signs in to or scrapes Udemy. You enter your lecture and progress details manually.
+- Data saves automatically on this device. Nothing is sent anywhere.
+- Export a backup now and then from **Settings → Data Management**. Clearing site data or uninstalling the app deletes it.
+- The app never signs in to course sites. You enter course progress yourself.
+- AB-650 practice questions are original learning questions, not Microsoft exam questions.
