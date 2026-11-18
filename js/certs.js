@@ -509,8 +509,9 @@
       </div>
       <div class="cc-prov">${esc(c.provider)}</div>
       <h3 class="cc-name" title="${esc(c.name)}">${esc(c.name)}</h3>
+      ${c.description ? `<p class="cc-desc small muted" title="${esc(c.description)}">${esc(c.description)}</p>` : ''}
       <div class="cc-progress"><span class="num">${Math.round(sum.pct)}%</span>${bar(sum.pct, sum.pct >= 100 ? 'teal' : '')}</div>
-      <div class="cc-meta"><span>${icon('clock')}${A.fmtHours(sum.hours * 3600)}h</span><span>${icon('book')}${plural(qn, 'question')}</span><span>${icon('calendar')}${sum.last ? `Studied ${esc(relDay(sum.last.slice(0, 10)))}` : 'Not studied yet'}</span></div>
+      <div class="cc-meta"><span>${icon('clock')}${A.fmtHours(sum.hours * 3600)}h</span><span>${icon('book')}${plural(qn, 'question')}</span><span>${icon('target')}${plural((c.exam && c.exam.domains || []).length, 'domain')}</span><span>${icon('check')}${sum.quizPct == null ? 'No quiz answers yet' : `Quiz ${Math.round(sum.quizPct)}% · ${sum.quizAnswered} answered`}</span><span>${icon('calendar')}${sum.last ? `Studied ${esc(relDay(sum.last.slice(0, 10)))}` : 'Not studied yet'}</span></div>
       <div class="cc-actions">
         ${c.archived ? `<button class="btn btn-sm" data-action="cert-unarchive" data-id="${esc(c.id)}">${icon('archive')} Unarchive</button>`
           : active ? `<button class="btn btn-sm btn-primary" data-nav="home">${icon('home')} Open dashboard</button>` : `<button class="btn btn-sm btn-primary" data-action="switch-cert" data-id="${esc(c.id)}">${icon('switch')} Switch to</button>`}

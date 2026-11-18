@@ -4,6 +4,8 @@ CHROME='/usr/bin/google-chrome' if os.path.exists('/usr/bin/google-chrome') else
 import json, subprocess, time, sys
 from playwright.sync_api import sync_playwright
 APP=os.path.dirname(HERE); PORT=8705
+import re as _re
+CACHE='prepwise-'+_re.search(r"CACHE_VERSION = '([^']+)'", open(os.path.join(APP,'service-worker.js')).read()).group(1)
 srv = subprocess.Popen([sys.executable, '-m', 'http.server', str(PORT), '-d', APP], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); time.sleep(0.8)
 legacy = open('legacy_v1_state.json').read()
 out=[]
@@ -22,8 +24,8 @@ try:
     pg.evaluate("navigator.serviceWorker.ready"); pg.wait_for_timeout(1500)
     keys = pg.evaluate("caches.keys()")
     check('SW registered & controlling', pg.evaluate("!!navigator.serviceWorker.controller") or pg.evaluate("navigator.serviceWorker.ready.then(r=>!!r.active)"))
-    check('new cache created, v1 cache removed', 'prepwise-v2.0.0' in keys and 'm365-study-tracker-v1.1.0' not in keys, keys)
-    cached = pg.evaluate("caches.open('prepwise-v2.0.0').then(c=>c.keys()).then(k=>k.map(r=>new URL(r.url).pathname))")
+    check('new cache created, v1 cache removed', CACHE in keys and 'm365-study-tracker-v1.1.0' not in keys, keys)
+    cached = pg.evaluate("caches.open('"+CACHE+"').then(c=>c.keys()).then(k=>k.map(r=>new URL(r.url).pathname))")
     sw = open(APP+'/service-worker.js').read()
     import re
     shell = re.findall(r"'\./([^']*)'", sw)

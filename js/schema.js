@@ -206,12 +206,22 @@
     const weeks = Array.isArray(p.weeks) ? p.weeks.slice(0, MAX_WEEKS).filter(isObj).map((w, i) => ({
       title: String(w.title || `Week ${i + 1}`).slice(0, 80),
       objectives: Array.isArray(w.objectives) ? w.objectives.map((o) => String(isObj(o) ? o.text || '' : o)).filter(Boolean).slice(0, 40) : [],
-      sessions: Array.isArray(w.sessions) ? w.sessions.filter(isObj).slice(0, 60).map((s) => ({
-        day: clampInt(s.day, 0, 6, 0),
-        topic: String(s.topic || 'Study session').slice(0, 140),
-        kind: KINDS.includes(s.kind) ? s.kind : 'study',
-        plannedMin: clampInt(s.plannedMin, 0, 1440, 60),
-      })) : [],
+      sessions: Array.isArray(w.sessions) ? w.sessions.filter(isObj).slice(0, 60).map((s) => {
+        const out = {
+          day: clampInt(s.day, 0, 6, 0),
+          topic: String(s.topic || 'Study session').slice(0, 140),
+          kind: KINDS.includes(s.kind) ? s.kind : 'study',
+          plannedMin: clampInt(s.plannedMin, 0, 1440, 60),
+        };
+        // Optional study guide for the session (added in content v1.1; older files simply omit it).
+        if (Array.isArray(s.objs) && s.objs.length) out.objs = s.objs.filter(isStr).slice(0, 30);
+        if (Array.isArray(s.links) && s.links.length) {
+          out.links = s.links.filter((l) => isObj(l) && isUrl(l.url)).slice(0, 12)
+            .map((l) => ({ title: String(l.title || l.url).slice(0, 160), url: String(l.url).trim(), type: isStr(l.type) ? l.type.slice(0, 20) : 'learn' }));
+        }
+        if (isStr(s.exercise) && s.exercise.trim()) out.exercise = s.exercise.slice(0, 2000);
+        return out;
+      }) : [],
     })) : [];
     const targets = Array.isArray(p.dailyTargets) && p.dailyTargets.length === 7 ? p.dailyTargets.map((v) => clampInt(v, 0, 720, 60)) : null;
     const studyDays = Array.isArray(p.studyDays) && p.studyDays.length === 7 ? p.studyDays.map(Boolean) : null;
@@ -405,7 +415,7 @@
   // Drop runtime-only fields so exports contain authored content only.
   function stripQuestion(q) {
     const out = {};
-    ['id', 'domain', 'obj', 'topic', 'diff', 'type', 'scenario', 'q', 'opts', 'ans', 'pairs', 'exp', 'why', 'feat', 'ref', 'refUrl', 'refTitle'].forEach((k) => {
+    ['id', 'cert', 'domain', 'obj', 'topic', 'diff', 'type', 'scenario', 'q', 'opts', 'ans', 'pairs', 'exp', 'why', 'feat', 'ref', 'refUrl', 'refTitle'].forEach((k) => {
       if (q[k] !== undefined && q[k] !== '') out[k] = q[k];
     });
     return out;

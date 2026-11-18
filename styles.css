@@ -932,3 +932,13 @@ input[type="search"]::-webkit-search-cancel-button { filter: invert(0.6); }
 .list-gap { grid-template-columns: minmax(0, 1fr); }
 .quiz-item, .list-gap > * { min-width: 0; }
 .week-bars { grid-template-columns: minmax(0, 1fr); } .week-bar-row { min-width: 0; }
+
+/* Session study guide (built-in plan templates) */
+.session-guide { padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,0.03); border: 1px solid var(--line, rgba(255,255,255,0.08)); }
+.guide-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.guide-list li { line-height: 1.45; overflow-wrap: anywhere; }
+.guide-list .chip { height: 20px; font-size: 11px; margin-right: 4px; vertical-align: 1px; }
+.guide-list a { display: inline-flex; gap: 6px; align-items: flex-start; color: var(--accent, #5b8cff); text-decoration: none; }
+.guide-list a:hover { text-decoration: underline; }
+.guide-list a .ic { width: 15px; height: 15px; flex: none; margin-top: 2px; }
+.cert-card .cc-desc { margin: 0; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }

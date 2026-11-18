@@ -91,6 +91,14 @@ A complete, valid example is in [`certifications/template-profile.json`](../cert
 
 `day` is 0–6 (Day 1–7 of the week, counted from the start date). `kind` is `study`, `practical`, `revision` or `assessment`. If no week has sessions, PrepWise creates one session per study day.
 
+Sessions can also carry an optional study guide, shown in the session sheet (older files simply leave these out):
+
+| Field | Meaning |
+|---|---|
+| `objs` | Exam objective or section codes the session covers, e.g. `["2.2.1", "2.2.2"]` |
+| `links` | Up to 12 `{ "title", "url", "type" }` items; `type` is `learn` (Microsoft Learn module or path) or `docs` |
+| `exercise` | A practical exercise or scenario for the session (plain text) |
+
 ### `resources`
 
 `{ "id", "title", "url", "type", "notes" }`, where `type` is `course`, `documentation`, `study-guide`, `video`, `lab`, `practice-test`, `book` or `other`.
@@ -140,3 +148,15 @@ If anything fails, you see the list of problems and nothing on the device change
 3. Bump `CACHE_VERSION` in `service-worker.js`.
 
 Built-in exam outlines and banks are read-only in the app so updates can keep them current. Duplicate a built-in profile to customise it.
+
+### Updating a built-in Microsoft profile when the exam outline changes
+
+The SC-300 and MD-102 outlines live in `certifications/<id>/meta.js` as data (domains and weightings, sections, objectives, reference links, Learn modules, and the `outline` date). The quiz engine doesn't need to change.
+
+1. Open the official study guide and compare its "Skills measured as of" date and change log with `outline` in `meta.js`.
+2. Update `domains[].weight`, `sections` and `objectives`, and set `outline.skillsAsOf` and `outline.checkedOn`.
+3. Move or add questions for changed objectives (`obj` codes), and update the plan sessions' `objs` in `profile.js`.
+4. Update the expected weightings and objective counts at the top of `tests/certs.js`, then run `node tests/certs.js` (it regenerates `docs/COVERAGE.md`) and `node tests/links.js`.
+5. Bump `version` in `meta.js` and `CACHE_VERSION` in `service-worker.js`.
+
+Existing users keep their progress: question history is stored by question ID, so keep IDs stable and only add new ones.

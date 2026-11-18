@@ -23,7 +23,7 @@
   const BACKUP_V1_KEY = 'prepwise:backup:v1';
   const BANK_PREFIX = 'prepwise:bank:';
   const SNAP_KEY = 'prepwise:snapshots';
-  const APP_VERSION = '2.0.0';
+  const APP_VERSION = '2.1.0';
   const APP_NAME = 'PrepWise';
   const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -241,10 +241,11 @@
     const weeks = tmpl.map((w, wi) => {
       if (w.sessions && w.sessions.length) {
         const perDay = {};
-        w.sessions.forEach((s) => {
+        w.sessions.forEach((s, si) => {
           const order = perDay[s.day] = (perDay[s.day] ?? -1) + 1;
           const custom = s.plannedMin !== targets[s.day];
-          sessions.push(newSession({ week: wi + 1, day: s.day, order, topic: s.topic, kind: s.kind, plannedMin: s.plannedMin, customPlanned: custom }));
+          const extra = (s.links || s.exercise || s.objs) ? { tpl: `${wi}:${si}` } : {};
+          sessions.push(newSession({ week: wi + 1, day: s.day, order, topic: s.topic, kind: s.kind, plannedMin: s.plannedMin, customPlanned: custom, ...extra }));
         });
       } else if (generate) {
         // No template sessions: one study session per study day.
@@ -1038,7 +1039,10 @@
     const days = Object.keys(p.activity || {}).filter((k) => p.activity[k] && (num(p.activity[k].min) > 0 || num(p.activity[k].done) > 0)).sort();
     const lastAttempt = p.quiz && Array.isArray(p.quiz.attempts) && p.quiz.attempts.length ? p.quiz.attempts[p.quiz.attempts.length - 1].date : null;
     const last = [p.lastStudied, days.length ? days[days.length - 1] : null, lastAttempt].filter(Boolean).sort().pop() || null;
-    return { pct: items ? (score / items) * 100 : 0, last, hours: p.sessions.reduce((a, s) => a + num(s.actualSec), 0) / 3600 };
+    // Quiz performance from this certification's own statistics (never mixed with other certifications)
+    const stats = p.quiz && p.quiz.stats && typeof p.quiz.stats === 'object' ? Object.values(p.quiz.stats) : [];
+    const qn = stats.reduce((a, s) => a + num(s && s.n), 0), qc = stats.reduce((a, s) => a + num(s && s.c), 0);
+    return { pct: items ? (score / items) * 100 : 0, last, hours: p.sessions.reduce((a, s) => a + num(s.actualSec), 0) / 3600, quizAnswered: qn, quizPct: qn ? (qc / qn) * 100 : null };
   }
 
   // ---------------------------------------------------------------
@@ -1304,6 +1308,28 @@
     </button>`;
   }
 
+  // Study guide for a session created from a plan template (objectives, Microsoft Learn links, practical exercise).
+  function sessionTemplate(s) {
+    if (!s || typeof s.tpl !== 'string') return null;
+    const [wi, si] = s.tpl.split(':').map(Number);
+    const w = cert.plan.weeks[wi];
+    return (w && w.sessions && w.sessions[si]) || null;
+  }
+  function sessionGuide(s) {
+    const t = sessionTemplate(s);
+    if (!t || !(t.links || t.exercise || t.objs)) return '';
+    const objs = (t.objs || []).map((o) => {
+      const text = cert.exam.objectives[o] || cert.exam.sections[o] || '';
+      return `<li><span class="chip">${esc(o)}</span> ${esc(text)}</li>`;
+    }).join('');
+    const links = (t.links || []).map((l) => `<li><a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${icon(l.type === 'docs' ? 'book' : 'external')}${esc(l.title)}</a></li>`).join('');
+    return `<div class="field session-guide"><span class="label">Study guide</span>
+      ${objs ? `<div class="tiny muted" style="margin:4px 0">Exam objectives</div><ul class="guide-list small">${objs}</ul>` : ''}
+      ${links ? `<div class="tiny muted" style="margin:8px 0 4px">Microsoft Learn and documentation</div><ul class="guide-list small">${links}</ul>` : ''}
+      ${t.exercise ? `<div class="tiny muted" style="margin:8px 0 4px">Practical exercise</div><p class="small" style="margin:0;white-space:pre-line">${esc(t.exercise)}</p>` : ''}
+    </div>`;
+  }
+
   function openSessionSheet(id) {
     const s = getSession(id);
     if (!s) return;
@@ -1339,6 +1365,8 @@
         <label class="field"><span class="label">Actual time</span>
           ${numField({ value: Math.round(s.actualSec / 60), bind: `session:${s.id}:actualMin`, min: 0, max: 1440, step: 1, unit: 'min', id: `actual-${s.id}`, label: 'Actual minutes' })}</label>
       </div>
+
+      ${sessionGuide(s)}
 
       <label class="field"><span class="label">Study topic</span>
         <input class="input" type="text" value="${esc(s.topic)}" data-bind="session:${s.id}:topic" maxlength="140">
