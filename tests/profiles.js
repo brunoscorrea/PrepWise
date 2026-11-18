@@ -94,7 +94,8 @@ const noOverflow = "return document.documentElement.scrollWidth <= window.innerW
     t('2 greeting: Bruno sees "Good afternoon, Bruno"', (await A.eval(TITLE)) === 'Good afternoon, Bruno', await A.eval(TITLE));
     await onboard(B, 'Alex');
     t('3 greeting: a second user sees "Good afternoon, Alex"', (await B.eval(TITLE)) === 'Good afternoon, Alex', await B.eval(TITLE));
-    t('5 layout: the full greeting is visible on a 375px phone (not cut off)', await B.eval("const h = document.querySelector('#topbar-title'); return h.scrollWidth <= h.clientWidth + 1 && h.scrollHeight <= h.clientHeight + 1"));
+    const gm = await B.eval("const h = document.querySelector('#topbar-title'); const cs = getComputedStyle(h); return { sw: h.scrollWidth, cw: h.clientWidth, sh: h.scrollHeight, ch: h.clientHeight, font: cs.fontFamily.split(',')[0] + ' ' + cs.fontSize, lines: Math.round(h.scrollHeight / parseFloat(cs.lineHeight)) }");
+    t('5 layout: the full greeting is visible on a 375px phone (not cut off)', gm.sw <= gm.cw + 1 && gm.sh <= gm.ch + 1, JSON.stringify(gm));
     t('3 greeting: Alex never sees Bruno anywhere (page or storage)', !PERSONAL.test(await B.eval('return document.body.innerText')) && !PERSONAL.test(JSON.stringify(await B.eval(ALL_STORAGE))));
     t('1 onboarding: name is kept after a reload, no second welcome', await (async () => { await A.reload(); return !(await A.eval("return !!document.getElementById('onboard-root')")) && (await A.eval(TITLE)) === 'Good afternoon, Bruno'; })());
 
