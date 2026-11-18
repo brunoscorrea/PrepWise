@@ -1,3 +1,4 @@
 tests/dl/
 tests/shots/
 __pycache__/
+_site/

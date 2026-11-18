@@ -1,0 +1,117 @@
+# Test, build and (when enabled) deploy PrepWise to GitHub Pages.
+#
+# Every push and pull request runs the tests. A deployment happens only when ALL of:
+#   - the run is on the main branch (push or manual "Run workflow"),
+#   - the repository variable PAGES_DEPLOY is set to "true"
+#     (Settings → Secrets and variables → Actions → Variables),
+#   - the tests passed and the build checks passed.
+# Until PAGES_DEPLOY is set, nothing is published.
+name: Test and deploy to GitHub Pages
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Unit, content and browser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tests/pages.js rebuilds the currently live v2.2.0 site from history
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Browser used by the tests
+        run: google-chrome --version
+      - name: Unit tests
+        run: node tests/unit.js
+      - name: Certification content (SC-300, MD-102, AB-650)
+        run: node tests/certs.js
+      - name: Profile storage and personal-information scan
+        run: node tests/profiles-unit.js
+      - name: Build checks (precache list, paths, versions)
+        run: node scripts/build-pages.js --check
+      - name: Browser — local profiles, isolation, upgrade, offline
+        run: node tests/profiles.js
+      - name: Browser — SC-300 / MD-102 quiz modes and backup restore
+        run: node tests/run-multicert.js
+      - name: Browser — GitHub Pages hosting at /PrepWise/ (scope, offline, updates, shared origin)
+        run: node tests/pages.js
+
+  playwright:
+    # The older Python Playwright suites. Reported, but not yet required for deployment.
+    name: Python Playwright suites (informational)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install playwright
+      - name: e2e.py
+        run: python e2e.py
+      - name: layout.py
+        if: always()
+        run: python layout.py
+      - name: pwa.py
+        if: always()
+        run: python pwa.py
+      - name: multicert.py
+        if: always()
+        run: python multicert.py
+
+  build:
+    name: Build site
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      cache_version: ${{ steps.build.outputs.cache_version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - id: build
+        name: Build _site (app files only, CACHE_VERSION stamped from content)
+        run: node scripts/build-pages.js
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.PAGES_DEPLOY == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+      - run: echo "Deployed ${{ needs.build.outputs.cache_version }} to ${{ steps.deployment.outputs.page_url }}"

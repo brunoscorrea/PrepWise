@@ -5,7 +5,7 @@ import json, subprocess, time, sys
 from playwright.sync_api import sync_playwright
 APP=os.path.dirname(HERE); PORT=8705
 import re as _re
-CACHE='prepwise-'+_re.search(r"CACHE_VERSION = '([^']+)'", open(os.path.join(APP,'service-worker.js')).read()).group(1)
+CACHE='prepwise:/:'+_re.search(r"CACHE_VERSION = '([^']+)'", open(os.path.join(APP,'service-worker.js')).read()).group(1)
 srv = subprocess.Popen([sys.executable, '-m', 'http.server', str(PORT), '-d', APP], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); time.sleep(0.8)
 legacy = open('legacy_v1_state.json').read()
 out=[]

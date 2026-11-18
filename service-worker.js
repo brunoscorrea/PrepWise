@@ -1,9 +1,20 @@
 /* Offline-first service worker for PrepWise.
-   Bump CACHE_VERSION whenever you change any app file so installed apps pick up the update. */
-const CACHE_VERSION = 'v2.2.0';
-const CACHE_PREFIX = 'prepwise-';
-const LEGACY_PREFIX = 'm365-study-tracker-'; // v1 caches, removed on activate
+
+   CACHE_VERSION: the deploy workflow (scripts/build-pages.js) replaces it with
+   "v<APP_VERSION>-<content hash>", so every deployment that changes an app file
+   gets a new cache automatically. Locally it is just the app version.
+
+   Caches are named per site path ("prepwise:/PrepWise/:v…"), so two copies of
+   PrepWise on the same origin (for example brunoscorrea.github.io/m365-study-tracker/
+   and brunoscorrea.github.io/PrepWise/) never delete each other's caches. The
+   name deliberately doesn't start with "prepwise-": v2.2 and earlier delete every
+   "prepwise-*" cache that isn't their own when they activate. */
+const CACHE_VERSION = 'v2.3.0';
+const SCOPE = new URL(self.registration.scope).pathname; // e.g. "/PrepWise/"
+const CACHE_PREFIX = `prepwise:${SCOPE}:`;
 const CACHE_NAME = `${CACHE_PREFIX}${CACHE_VERSION}`;
+// Caches written by earlier versions. Removed only if they hold files from THIS site path.
+const LEGACY_PREFIXES = ['prepwise-', 'm365-study-tracker-'];
 const APP_SHELL = [
   './',
   './index.html',
@@ -38,18 +49,38 @@ const APP_SHELL = [
   './icons/icon-maskable-512.png',
 ];
 
+// Fetch every file from the network, bypassing the browser's HTTP cache
+// (GitHub Pages sends Cache-Control: max-age=600) and the CDN (version query),
+// so a new version can never be cached with files from the previous one.
+async function precache() {
+  const cache = await caches.open(CACHE_NAME);
+  await Promise.all(APP_SHELL.map(async (path) => {
+    const url = new URL(path, self.registration.scope);
+    url.searchParams.set('v', CACHE_VERSION);
+    const res = await fetch(new Request(url, { cache: 'reload' }));
+    if (!res.ok) throw new Error(`Precache failed for ${path}: ${res.status}`);
+    await cache.put(new URL(path, self.registration.scope).href, res);
+  }));
+}
+
+async function cleanUp() {
+  const keys = await caches.keys();
+  await Promise.all(keys.map(async (k) => {
+    if (k === CACHE_NAME) return;
+    if (k.startsWith(CACHE_PREFIX)) { await caches.delete(k); return; }
+    if (LEGACY_PREFIXES.some((p) => k.startsWith(p))) {
+      const reqs = await (await caches.open(k)).keys();
+      if (reqs.some((r) => new URL(r.url).pathname.startsWith(SCOPE))) await caches.delete(k);
+    }
+  }));
+}
+
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
+  event.waitUntil(precache());
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys
-        .filter((k) => (k.startsWith(CACHE_PREFIX) && k !== CACHE_NAME) || k.startsWith(LEGACY_PREFIX))
-        .map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())
-  );
+  event.waitUntil(cleanUp().then(() => self.clients.claim()));
 });
 
 self.addEventListener('message', (event) => {
@@ -61,27 +92,26 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // never touch course sites or other origins
+  if (!url.pathname.startsWith(SCOPE)) return;      // never touch other sites on this origin
 
   // Page navigations: serve the cached shell, so the app opens offline.
   if (req.mode === 'navigate') {
     event.respondWith(
-      caches.match('./index.html').then((cached) => cached || fetch(req))
-        .catch(() => caches.match('./index.html'))
+      caches.open(CACHE_NAME).then((c) => c.match(new URL('./index.html', self.registration.scope).href))
+        .then((cached) => cached || fetch(req))
+        .catch(() => caches.open(CACHE_NAME).then((c) => c.match(new URL('./index.html', self.registration.scope).href)))
     );
     return;
   }
 
-  // Static assets: cache first, then network (and cache the result).
+  // Static assets: this version's cache first, then network (and cache the result).
   event.respondWith(
-    caches.match(req, { ignoreSearch: true }).then((cached) => {
+    caches.open(CACHE_NAME).then((cache) => cache.match(req, { ignoreSearch: true }).then((cached) => {
       if (cached) return cached;
       return fetch(req).then((res) => {
-        if (res && res.ok && res.type === 'basic') {
-          const copy = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
-        }
+        if (res && res.ok && res.type === 'basic') cache.put(req, res.clone());
         return res;
       });
-    })
+    }))
   );
 });

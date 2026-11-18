@@ -285,8 +285,8 @@ const noOverflow = "return document.documentElement.scrollWidth <= window.innerW
     await A.waitFor("return navigator.serviceWorker.ready.then(() => true)");
     await A.reload();
     await A.waitFor('return !!navigator.serviceWorker.controller');
-    const sw = await A.eval("const ks = await caches.keys(); const c = await caches.open(ks.find((k) => k.startsWith('prepwise-'))); const r = await c.match('./js/profiles.js'); const m = await (await fetch('manifest.json')).json(); return { ks, profiles: !!r, manifest: m.display, icons: m.icons.length }");
-    t('9 PWA: service worker controls the page and caches js/profiles.js', sw.profiles && sw.ks.some((k) => /^prepwise-v2\.2\.0$/.test(k)), JSON.stringify(sw));
+    const sw = await A.eval("const ks = await caches.keys(); const c = await caches.open(ks.find((k) => k.startsWith('prepwise:/:'))); const r = await c.match('./js/profiles.js'); const m = await (await fetch('manifest.json')).json(); return { ks, profiles: !!r, manifest: m.display, icons: m.icons.length }");
+    t('9 PWA: service worker controls the page and caches js/profiles.js', sw.profiles && sw.ks.includes(`prepwise:/:v${await A.eval('return PrepWise.APP_VERSION')}`), JSON.stringify(sw));
     t('9 PWA: manifest is installable (standalone, icons)', sw.manifest === 'standalone' && sw.icons >= 2, JSON.stringify(sw));
     await srv.stop();
     await A.reload();

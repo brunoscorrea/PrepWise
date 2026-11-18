@@ -49,7 +49,10 @@ docs/COVERAGE.md                 Question counts per domain and per exam objecti
 certifications/template-profile.json   A valid example profile to start from
 docs/CERTIFICATION-PROFILES.md   How to create and share profiles; the JSON schema
 docs/PRIVACY.md                  What is stored where, local profiles, sharing PrepWise with friends
-service-worker.js                Offline cache
+service-worker.js                Offline cache (per-path cache names; CACHE_VERSION stamped at build)
+scripts/build-pages.js           Checks and builds the GitHub Pages site into _site/
+.github/workflows/pages.yml      Tests, build and gated deployment to GitHub Pages
+legacy-redirect/                 Files that retire the old m365-study-tracker address (not deployed)
 manifest.json                    PWA manifest
 icons/                           App icons
 ```
@@ -100,17 +103,27 @@ node tests/links.js          # checks every SC-300/MD-102 reference and Learn li
 node tests/profiles-unit.js  # profile storage layer + scan of the shipped app for personal information
 node tests/profiles.js       # real browser: onboarding, profiles, isolation, export/import, upgrade, PWA/offline
 node tests/run-multicert.js  # real browser: SC-300/MD-102 quiz modes, upgrade, backup restore
+node tests/pages.js          # real browser: GitHub Pages at /PrepWise/ (scope, offline, updates, shared origin, redirect)
+node scripts/build-pages.js --check   # precache list, relative paths, APP_VERSION/CACHE_VERSION
 ```
 
-`profiles.js` and `run-multicert.js` drive headless Edge or Chrome over the DevTools protocol (Node 22+, no npm packages; set `BROWSER=` to the executable if it isn't found). The older end-to-end, layout and PWA checks use Python Playwright with Chrome (`pip install playwright`).
+`profiles.js`, `run-multicert.js` and `pages.js` drive headless Edge or Chrome over the DevTools protocol (Node 22+, no npm packages; set `BROWSER=` to the executable if it isn't found). The older end-to-end, layout and PWA checks use Python Playwright with Chrome (`pip install playwright`).
 
 ## Deploy
 
-The app is static. Upload the folder to any static host (GitHub Pages, Netlify, Cloudflare Pages). All paths are relative.
+PrepWise is static, with no build dependencies or backend. It's deployed to **GitHub Pages** by `.github/workflows/pages.yml`:
 
-**To keep your existing AB-650 data, deploy to the same origin as v1** (for example, push to the existing `m365-study-tracker` repository on GitHub Pages). Browser storage is per origin, so a different domain starts empty. A different repository under the same `github.io` account shares the origin, so it also finds the v1 data.
+1. Every push and pull request runs the unit, content and real-browser tests (`test` job). The older Python Playwright suites run in a separate, informational job.
+2. `scripts/build-pages.js` checks the app and builds `_site/`. The check covers every script, certification file and icon being precached, relative paths, and matching versions. `_site/` contains only the app files (no tests, docs or fixtures), and `CACHE_VERSION` is stamped as `v<APP_VERSION>-<content hash>`, so every deployment that changes an app file gets a new cache automatically.
+3. The `deploy` job publishes `_site/` to Pages only from `main`, and only when the repository variable `PAGES_DEPLOY` is `true`.
 
-Whenever you change any file, bump `CACHE_VERSION` in `service-worker.js`. Installed apps then show **A new version is available → Update**.
+Set **Settings → Pages → Source** to **GitHub Actions**. A private repository needs GitHub Pro, Team or Enterprise for Pages. The published site is public either way.
+
+When you release a user-visible change, bump `APP_VERSION` in `app.js` and `CACHE_VERSION` in `service-worker.js` to the same number. The build fails if they differ. Cache refreshes don't depend on it: the content hash handles those. Installed apps show **A new version is available → Update**.
+
+**Rollback:** `git revert` the change and push to `main`. The reverted files produce a new content hash, so installed apps update to the previous code.
+
+**Same origin, shared data:** `https://brunoscorrea.github.io/PrepWise/` and the old `…/m365-study-tracker/` share one origin, so they share `localStorage`: every profile and all progress appear at the new address with no export. Caches are named per path (`prepwise:/PrepWise/:v…`), so the two copies never delete each other's caches. `legacy-redirect/` holds the files that retire the old address (see its README). A custom domain is a new origin: users would need Export → Import.
 
 ## Install
 

@@ -29,7 +29,7 @@
   let BANK_PREFIX = K.bankPrefix;
   let SNAP_KEY = K.snaps;
   let suspended = false;         // true while switching/deleting profiles: nothing is written
-  const APP_VERSION = '2.2.0';
+  const APP_VERSION = '2.3.0';
   const APP_NAME = 'PrepWise';
   const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
