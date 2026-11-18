@@ -4,7 +4,7 @@
 #   - the run is on the main branch (push or manual "Run workflow"),
 #   - the repository variable PAGES_DEPLOY is set to "true"
 #     (Settings → Secrets and variables → Actions → Variables),
-#   - the tests passed and the build checks passed.
+#   - every test job passed and the build checks passed.
 # Until PAGES_DEPLOY is set, nothing is published.
 name: Test and deploy to GitHub Pages
 
@@ -53,11 +53,10 @@ jobs:
         run: node tests/pages.js
 
   playwright:
-    # The older Python Playwright suites. Reported, but not yet required for deployment.
-    name: Python Playwright suites (informational)
+    # The original Python Playwright suites (e2e, layout at 4 sizes, PWA, multi-cert).
+    name: Python Playwright suites
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    continue-on-error: true
     defaults:
       run:
         working-directory: tests
@@ -81,7 +80,7 @@ jobs:
 
   build:
     name: Build site
-    needs: test
+    needs: [test, playwright]
     runs-on: ubuntu-latest
     outputs:
       cache_version: ${{ steps.build.outputs.cache_version }}

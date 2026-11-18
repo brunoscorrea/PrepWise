@@ -113,7 +113,7 @@ node scripts/build-pages.js --check   # precache list, relative paths, APP_VERSI
 
 PrepWise is static, with no build dependencies or backend. It's deployed to **GitHub Pages** by `.github/workflows/pages.yml`:
 
-1. Every push and pull request runs the unit, content and real-browser tests (`test` job). The older Python Playwright suites run in a separate, informational job.
+1. Every push and pull request runs the unit, content and real-browser tests (`test` job). The original Python Playwright suites run in a second required job.
 2. `scripts/build-pages.js` checks the app and builds `_site/`. The check covers every script, certification file and icon being precached, relative paths, and matching versions. `_site/` contains only the app files (no tests, docs or fixtures), and `CACHE_VERSION` is stamped as `v<APP_VERSION>-<content hash>`, so every deployment that changes an app file gets a new cache automatically.
 3. The `deploy` job publishes `_site/` to Pages only from `main`, and only when the repository variable `PAGES_DEPLOY` is `true`.
 

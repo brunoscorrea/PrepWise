@@ -51,3 +51,4 @@ try:
     b.close()
 finally: srv.terminate()
 print('PWA', sum(c for _,c in out), '/', len(out))
+import sys as _sys; _sys.exit(0 if out and all(c for _,c in out) else 1)

@@ -37,7 +37,7 @@ try:
                 for r in pg.evaluate(OVERLAP_JS):
                     if not (r['fits'] and r['unitClear']) or r['inputW']<40: fails.append(f"{name} {v} numfield {r}")
                 # elements overflowing their own container horizontally
-                bad = pg.evaluate("""() => [...document.querySelectorAll('.view:not([hidden]) *')].filter(e=>{const r=e.getBoundingClientRect(); return r.width>0 && (r.right>innerWidth+1)}).slice(0,3).map(e=>e.className+' '+Math.round(e.getBoundingClientRect().right))""")
+                bad = pg.evaluate("""() => [...document.querySelectorAll('.view:not([hidden]) *')].filter(e=>{const r=e.getBoundingClientRect(); if(!(r.width>0 && r.right>innerWidth+1)) return false; for(let a=e.parentElement;a;a=a.parentElement){const cs=getComputedStyle(a); if(/hidden|clip|auto|scroll/.test(cs.overflowX) && a.getBoundingClientRect().right<=innerWidth+1) return false;} return true}).slice(0,3).map(e=>e.className+' '+Math.round(e.getBoundingClientRect().right))""")
                 if bad: fails.append(f'{name} {cid} {v} offscreen {bad}')
         # sheets & dialogs fit viewport
         pg.evaluate("window.PrepWise.switchCert('ab-650',{toast:false}); window.PrepWise.navigate('plan')"); pg.wait_for_timeout(200)
@@ -66,3 +66,4 @@ try:
     b.close()
 finally: srv.terminate()
 print('checks', n, 'fails', len(fails)); print('\n'.join(fails[:40]))
+import sys as _sys; _sys.exit(1 if fails or not n else 0)
